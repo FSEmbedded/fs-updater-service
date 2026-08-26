@@ -1,0 +1,43 @@
+# Encodes the machine-checkable subset of the project's C++ coding standard:
+# no raw new/delete, no malloc, and the banned-header list (iostream, regex,
+# filesystem, cstdio, list). Those run as errors; the rest of the
+# bugprone/cert/performance/readability surface is reported as warnings.
+Checks: >
+  bugprone-*,
+  -bugprone-easily-swappable-parameters,
+  cert-*,
+  clang-analyzer-*,
+  concurrency-*,
+  cppcoreguidelines-owning-memory,
+  cppcoreguidelines-no-malloc,
+  cppcoreguidelines-pro-type-cstyle-cast,
+  cppcoreguidelines-slicing,
+  misc-*,
+  -misc-include-cleaner,
+  -misc-non-private-member-variables-in-classes,
+  modernize-*,
+  -modernize-use-trailing-return-type,
+  performance-*,
+  portability-restrict-system-includes,
+  readability-*,
+  -readability-identifier-length,
+  -readability-magic-numbers,
+  -readability-function-cognitive-complexity,
+  -readability-convert-member-functions-to-static
+
+WarningsAsErrors: >
+  cppcoreguidelines-owning-memory,
+  cppcoreguidelines-no-malloc,
+  portability-restrict-system-includes,
+  cert-env33-c
+
+HeaderFilterRegex: 'src/.*'
+
+CheckOptions:
+  # Allow-list: everything except the banned headers.
+  - key: portability-restrict-system-includes.Includes
+    value: '*,-iostream,-regex,-filesystem,-cstdio,-stdio.h,-list'
+  - key: readability-implicit-bool-conversion.AllowPointerConditions
+    value: 'true'
+  - key: readability-implicit-bool-conversion.AllowIntegerConditions
+    value: 'true'

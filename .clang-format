@@ -1,0 +1,33 @@
+# Encodes the tree's dominant brace style. Some files still use the other
+# one, so `clang-format --dry-run` reports findings on them; format new
+# files cleanly rather than bulk-reformatting existing ones.
+BasedOnStyle: LLVM
+Standard: c++17
+
+IndentWidth: 4
+AccessModifierOffset: -4
+ColumnLimit: 120
+
+# Functions/classes/namespaces open braces on their own line; control
+# statements keep the brace attached.
+BreakBeforeBraces: Linux
+
+PointerAlignment: Right
+ReferenceAlignment: Right
+
+# Constructor initializers stay on one line when they fit (RAII guards),
+# otherwise one per line with the comma at line end.
+BreakConstructorInitializers: BeforeColon
+PackConstructorInitializers: CurrentLine
+
+AlignAfterOpenBracket: Align
+AllowShortFunctionsOnASingleLine: Inline
+AllowShortIfStatementsOnASingleLine: Never
+AllowShortLoopsOnASingleLine: false
+
+# #include inside an #ifdef keeps its indentation.
+IndentPPDirectives: BeforeHash
+
+# Include order is hand-grouped (local first, then system); don't churn it.
+SortIncludes: Never
+IncludeBlocks: Preserve

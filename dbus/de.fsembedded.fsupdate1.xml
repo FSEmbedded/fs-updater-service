@@ -1,0 +1,465 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE node PUBLIC
+  "-//freedesktop//DTD D-BUS Object Introspection 1.0//EN"
+  "http://www.freedesktop.org/standards/dbus/1.0/introspect.dtd">
+<!--
+  de.fsembedded.fsupdate1 — D-Bus interface for the F&S Update Framework
+
+  Object path : /de/fsembedded/fsupdate1
+  Bus name    : de.fsembedded.fsupdate1 (system bus)
+  Provider    : fs-updater-service (root, systemd Type=dbus)
+  Clients     : fs-updater CLI (cloud-flow flags), ADU update handler
+                (libfus_update_1.so loaded by AducIotAgent)
+
+  Session token
+  ─────────────
+  StartDownload returns a uint32 session_id — a monotonically incrementing
+  generation counter. Every subsequent method call in the same update cycle
+  (ReportDownloadProgress, FinishDownload, StartInstall) passes this token
+  back; the service rejects calls whose session_id does not match the active
+  session. Signals carry session_id so that a restarted client can correlate
+  the signal or property read to the update cycle it initiated.
+
+  session_id = 0 is reserved (never issued). On service start the counter
+  begins at 1. It wraps safely; the service only ever has one active session.
+
+  Restart safety
+  ──────────────
+  A client that reconnects after a crash reads GetState() to obtain the
+  current session_id and InstallState. If InstallState is already "finished"
+  or "failed" for the session it started, no signal wait is required.
+  The standard D-Bus race-free pattern applies: subscribe to signals first,
+  then read the property — any signal emitted after subscription is guaranteed
+  to arrive; the property read catches the case where the signal fired before
+  subscription.
+
+  Download ownership
+  ──────────────────
+  The ADU handler drives HTTP transfer via the Delivery Optimization SDK
+  (ExtensionManager::Download). The service records intent (StartDownload),
+  receives progress updates (ReportDownloadProgress), and is told when the
+  payload lands on disk (FinishDownload). The service never fetches URLs.
+
+  Install ownership
+  ─────────────────
+  The CLI cloud-flow flag --install_update triggers StartInstall. The service
+  drives FSUpdate::update_image() through fs-updater-lib. The ADU handler's
+  Install() subscribes to InstallCompleted, then reads InstallState to handle
+  the case where the signal fired before subscription.
+
+  Apply / Rollback ownership
+  ──────────────────────────
+  The CLI cloud-flow flags --apply_update and --rollback_update call Apply
+  and Rollback. These operate on durable lib state (U-Boot variables, RAUC
+  slot status) that survives service restarts, so no session_id is needed.
+  Apply() returns whether a reboot is mandatory; the ADU handler issues it
+  via workflow_request_immediate_reboot().
+
+  Progress sources (InstallProgress)
+  ───────────────────────────────────
+  Firmware only   : RAUC Progress property, callback-driven via FSUpdate::setInstallProgressCallback()
+  Application only: bytes written / applicationImage::application_image_size
+                    (size is read from the custom image header)
+  Combined fw+app : size-weighted composite of the two sources above
+
+  State enum values (DownloadState, InstallState)
+  ─────────────────────────────────────────────────
+    "idle"        — no operation in progress
+    "in_progress" — operation running
+    "finished"    — completed successfully
+    "failed"      — completed with error
+-->
+<node name="/de/fsembedded/fsupdate1">
+
+  <interface name="de.fsembedded.fsupdate1">
+
+    <!-- ═══════════════════════════════════════════════════════════════
+         Methods
+         ═══════════════════════════════════════════════════════════════ -->
+
+    <!--
+      CheckUpdateAvailable
+
+      Caller : CLI --is_update_available
+
+      Queries the lib state machine to determine whether an update is pending
+      (downloaded but not yet committed). Maps to the lib's getUpdateRebootState()
+      returning one of the INCOMPLETE_* values.
+
+      Out: available — true if an update is pending and uncommitted
+           type      — "fw", "app", or "fw+app"; "" when available=false
+           version   — version string from U-Boot env; "" when available=false
+           size      — payload size in bytes; 0 when available=false
+    -->
+    <method name="CheckUpdateAvailable">
+      <arg name="available" type="b" direction="out"/>
+      <arg name="type"      type="s" direction="out"/>
+      <arg name="version"   type="s" direction="out"/>
+      <arg name="size"      type="t" direction="out"/>
+    </method>
+
+    <!--
+      StartDownload
+
+      Caller : ADU handler's Download() immediately before invoking the DO SDK.
+
+      Registers the incoming download and opens a new update session. The
+      service increments the generation counter, resets all phase state to
+      idle, and returns the new session_id. If a session is already active
+      and not in a terminal state (finished/failed), the call is rejected
+      with org.freedesktop.DBus.Error.Failed.
+
+      The service does NOT perform any network I/O. The caller owns the HTTP
+      transfer and reports bytes received via ReportDownloadProgress.
+
+      On success, sets DownloadState to "in_progress".
+
+      In:  update_type    — "fw", "app", or "fw+app"
+           update_version — version string from the ADU twin manifest
+           update_size    — expected payload size in bytes
+
+      Out: session_id — monotonically increasing uint32 (never 0);
+                        pass to all subsequent calls in this update cycle
+    -->
+    <method name="StartDownload">
+      <arg name="update_type"    type="s" direction="in"/>
+      <arg name="update_version" type="s" direction="in"/>
+      <arg name="update_size"    type="t" direction="in"/>
+      <arg name="session_id"     type="u" direction="out"/>
+    </method>
+
+    <!--
+      ReportDownloadProgress
+
+      Caller : ADU handler, called periodically during the DO SDK transfer loop.
+
+      Updates DownloadProgress (0–100) and emits PropertiesChanged so any
+      subscriber sees live progress without polling.
+
+      Rejected if session_id does not match the active session, or if
+      DownloadState is not "in_progress".
+
+      In: session_id — value returned by StartDownload
+          bytes_done — bytes successfully received so far
+    -->
+    <method name="ReportDownloadProgress">
+      <arg name="session_id" type="u" direction="in"/>
+      <arg name="bytes_done" type="t" direction="in"/>
+    </method>
+
+    <!--
+      FinishDownload
+
+      Caller : ADU handler after the DO SDK download completes (success or failure).
+
+      On success, the service records payload_path for the subsequent StartInstall
+      and transitions DownloadState to "finished". On failure, DownloadState
+      transitions to "failed" and payload_path is ignored.
+
+      Rejected if session_id does not match the active session, or if
+      DownloadState is not "in_progress".
+
+      In: session_id   — value returned by StartDownload
+          success      — true if payload was fully received and hash-verified
+          payload_path — absolute path to the downloaded file;
+                         empty string when success=false
+    -->
+    <method name="FinishDownload">
+      <arg name="session_id"   type="u" direction="in"/>
+      <arg name="success"      type="b" direction="in"/>
+      <arg name="payload_path" type="s" direction="in"/>
+    </method>
+
+    <!--
+      StartInstall
+
+      Caller : CLI --install_update (replaces the installUpdate marker file).
+
+      The service looks up the payload path recorded by FinishDownload and
+      calls FSUpdate::update_image() asynchronously. Returns as soon as the
+      install is dispatched; live progress flows via InstallProgress
+      PropertiesChanged notifications. Terminal outcome is the InstallCompleted
+      signal, which carries session_id for correlation.
+
+      Rejected if session_id does not match the active session, if
+      DownloadState is not "finished", or if InstallState is not "idle".
+
+      In:  session_id  — value returned by StartDownload; validates continuity
+           update_type — "fw", "app", or "fw+app"; must match StartDownload.
+                         Mismatch is rejected to catch integration bugs at the
+                         boundary.
+
+      No return value. Clients subscribe to InstallCompleted before calling;
+      after the call they read InstallState to handle the race where the signal
+      fires before subscription completes.
+    -->
+    <method name="StartInstall">
+      <arg name="session_id"  type="u" direction="in"/>
+      <arg name="update_type" type="s" direction="in"/>
+    </method>
+
+    <!--
+      InstallLocal
+
+      Caller : CLI --update_install <path> (unified local install path).
+
+      Mints a fresh session and drives FSUpdate::update_image() against a
+      bundle that is already on disk (USB stick, downloader output, etc.).
+      Bypasses the StartDownload/FinishDownload half of the session flow.
+
+      Returns the session_id immediately; install runs asynchronously on a
+      worker thread. Progress flows via the InstallProgress property and
+      PropertiesChanged signals; terminal outcome via InstallCompleted.
+
+      Rejected with:
+        org.freedesktop.DBus.Error.FileNotFound — path missing or unreadable
+        org.freedesktop.DBus.Error.LimitsExceeded — a session is already non-terminal
+
+      In:  path — absolute path to a local F&S update bundle (.fs container)
+
+      Out: session_id — monotonically increasing uint32 (never 0)
+    -->
+    <method name="InstallLocal">
+      <arg name="path"       type="s" direction="in"/>
+      <arg name="session_id" type="u" direction="out"/>
+    </method>
+
+    <!--
+      CancelInstall
+
+      Caller : CLI on SIGINT, ADU on workflow cancel.
+
+      Cooperative cancel. The worker polls m_cancel_requested at phase
+      boundaries (between fw and app stages, and before entering RAUC's
+      InstallBundle wait loop). When the cancel point is hit, the worker
+      pushes a Completion event with success=false, message="cancelled by
+      user" — clients see the standard InstallCompleted signal.
+
+      If the worker is currently inside a phase that has no cancel hook
+      (e.g. mid-RAUC InstallBundle write), the request is accepted but
+      will only take effect at the next phase boundary. This is documented
+      as a best-effort cancel; for hard guarantees see the safety rules.
+
+      Rejected with:
+        org.freedesktop.DBus.Error.InvalidArgs — session_id != active session
+        org.freedesktop.DBus.Error.FileNotFound — no install in progress
+
+      In: session_id — value returned by InstallLocal / StartDownload
+    -->
+    <method name="CancelInstall">
+      <arg name="session_id" type="u" direction="in"/>
+    </method>
+
+    <!--
+      Apply
+
+      Caller : CLI --apply_update cloud-mode (replaces the applyUpdate marker file).
+
+      Apply does NOT commit and does NOT resolve any INCOMPLETE_* state; it
+      writes nothing at all. The install already put the target slot at the
+      head of the boot order with a full boot budget, so all Apply reports is
+      whether the pending state still needs a reboot to take effect. A reboot
+      reaching the device by any other cause lands in exactly the same place —
+      that equivalence is the invariant, and it is why Apply must stay free of
+      durable writes.
+
+      Confirming the update is a separate, later step: see Commit, which the
+      decider calls only once the device is running the new slot.
+
+      This method does not reboot. The caller does, when reboot_required is
+      true; the ADU handler uses workflow_request_immediate_reboot().
+
+      No session_id: Apply reads durable lib state (U-Boot variables) that is
+      independent of the in-memory session.
+
+      Rejected if InstallState is not "finished".
+
+      Out: reboot_required — true for firmware updates; false for app-only
+    -->
+    <method name="Apply">
+      <arg name="reboot_required" type="b" direction="out"/>
+    </method>
+
+    <!--
+      Rollback
+
+      Caller : ADU handler Rollback() — CLI --rollback_update is local-flow only and calls FSUpdate directly.
+
+      Initiates a rollback through FSUpdate. After rollback the service
+      resets to idle state. RebootPending may be set if the firmware rollback
+      path requires a reboot to finalise.
+
+      No session_id: operates on durable lib state.
+
+      No arguments; no return value. Errors reported via D-Bus error replies.
+    -->
+    <method name="Rollback">
+    </method>
+
+    <!--
+      Commit
+
+      Caller : the decider — the application or operator that judges the update
+      healthy. Also the cancel flow, for the second role below.
+
+      Commit has two roles, and both are reached through this one method.
+
+      1. The health verdict on a pending update. Under health-by-application
+         nothing else renders it: the boot-time confirm deliberately leaves a
+         healthy pending update alone, and the autonomous mark-good service
+         only restores a boot counter. Call it AFTER the reboot, from the slot
+         the update installed. The library reads the reboot from evidence
+         rather than from a marker, so a commit attempted before the device is
+         running the new slot is refused, not silently accepted.
+
+      2. Finalising a rollback whose reboot has already happened — here the
+         device is running the slot it rolled back TO, and the decision was
+         made by whoever asked for the rollback. Nothing is being judged.
+
+      Until it is called the update stays pending, and a pending state blocks
+      every further install. Leaving it uncalled therefore does not preserve
+      the update; it makes the device un-updateable while the boot budget
+      erodes toward a fallback.
+
+      Does not replace the CLI's local --commit_update, which calls the library
+      directly: the boot-time confirm runs before this daemon is necessarily
+      up, so routing it through D-Bus would add a boot ordering dependency.
+      Both paths converge on the same durable state.
+
+      Out: committed — true if a pending update was confirmed; false if there
+      was nothing to confirm.
+    -->
+    <method name="Commit">
+      <arg name="committed" type="b" direction="out"/>
+    </method>
+
+    <!--
+      GetState
+
+      Caller : diagnostics tooling, busctl, restarted clients.
+
+      Returns a snapshot of all service state as a variant dict. A client that
+      reconnects after a crash calls this to obtain the current session_id and
+      phase states before deciding whether to wait for a signal or act on the
+      already-terminal state.
+
+      Keys and value types:
+        "SessionId"        u   (0 = no active session)
+        "UpdateAvailable"  b
+        "UpdateType"       s
+        "UpdateVersion"    s
+        "UpdateSize"       t
+        "DownloadState"    s   ("idle"|"in_progress"|"finished"|"failed")
+        "DownloadProgress" i   (0–100)
+        "InstallState"     s   ("idle"|"in_progress"|"finished"|"failed")
+        "InstallProgress"  i   (0–100)
+        "RebootPending"    b
+
+      Out: state — variant dict a{sv}
+    -->
+    <method name="GetState">
+      <arg name="state" type="a{sv}" direction="out"/>
+    </method>
+
+    <!-- ═══════════════════════════════════════════════════════════════
+         Properties (all read-only; changes emitted via PropertiesChanged)
+         ═══════════════════════════════════════════════════════════════ -->
+
+    <!--
+      Current session generation counter. 0 = no active session.
+      Matches the session_id returned by the most recent StartDownload.
+      Included in GetState() dict for atomic snapshot; also exposed as a
+      property for lightweight polling.
+    -->
+    <property name="SessionId"        type="u" access="read"/>
+
+    <!-- true iff an update slot is queued and awaiting install or commit -->
+    <property name="UpdateAvailable"  type="b" access="read"/>
+
+    <!-- "fw", "app", "fw+app", or "" when no update is queued -->
+    <property name="UpdateType"       type="s" access="read"/>
+
+    <!-- version string from the ADU twin manifest; "" when no update is queued -->
+    <property name="UpdateVersion"    type="s" access="read"/>
+
+    <!-- expected payload size in bytes; 0 when no update is queued -->
+    <property name="UpdateSize"       type="t" access="read"/>
+
+    <!-- download phase state: "idle"|"in_progress"|"finished"|"failed" -->
+    <property name="DownloadState"    type="s" access="read"/>
+
+    <!-- download completion, 0–100 -->
+    <property name="DownloadProgress" type="i" access="read"/>
+
+    <!-- install phase state: "idle"|"in_progress"|"finished"|"failed" -->
+    <property name="InstallState"     type="s" access="read"/>
+
+    <!--
+      Install completion, 0–100.
+      Source depends on update type:
+        fw only    — RAUC Progress property from de.pengutronix.rauc
+        app only   — bytes written / application_image_size (from image header)
+        fw+app     — size-weighted composite of the two above
+    -->
+    <property name="InstallProgress"  type="i" access="read"/>
+
+    <!--
+      true from the point Apply() is called for a firmware update until the
+      system reboots. Always false for application-only updates.
+    -->
+    <property name="RebootPending"    type="b" access="read"/>
+
+    <!-- ═══════════════════════════════════════════════════════════════
+         Signals
+         ═══════════════════════════════════════════════════════════════ -->
+
+    <!--
+      InstallCompleted
+
+      Emitted when FSUpdate::update_image() returns, regardless of outcome.
+
+      The ADU handler's Install() uses this signal as follows:
+        1. Subscribe to InstallCompleted.
+        2. Read InstallState property.
+        3. If InstallState is already "finished" or "failed", use it directly.
+        4. Otherwise block on the event loop until the signal arrives.
+        5. Match session_id against the value obtained from StartDownload.
+
+      session_id — matches the active session; used to reject stale signals
+                   from a previous update cycle after a service restart
+      success    — true if update_image() succeeded
+      message    — human-readable outcome; empty string on success
+    -->
+    <signal name="InstallCompleted">
+      <arg name="session_id" type="u"/>
+      <arg name="success"    type="b"/>
+      <arg name="message"    type="s"/>
+    </signal>
+
+    <!--
+      JobFailed
+
+      Emitted when an unexpected error interrupts a session before it reaches
+      normal completion — for example a lib panic or a RAUC bus disconnect
+      mid-install. Not emitted for errors already covered by
+      InstallCompleted(success=false).
+
+      Note: a service restart cannot emit this signal — the process is gone.
+      Clients that reconnect after a restart must call GetState() to detect a
+      lost session: if SessionId matches but InstallState is "idle", treat the
+      session as failed.
+
+      Clients treat this as an unrecoverable error for the named session.
+      The service resets to idle after emitting this signal.
+
+      session_id — identifies which update cycle failed
+      reason     — human-readable description of the failure
+    -->
+    <signal name="JobFailed">
+      <arg name="session_id" type="u"/>
+      <arg name="reason"     type="s"/>
+    </signal>
+
+  </interface>
+
+</node>

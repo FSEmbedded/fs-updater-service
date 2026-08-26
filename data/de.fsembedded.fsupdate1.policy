@@ -1,0 +1,143 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE policyconfig PUBLIC
+  "-//freedesktop//DTD PolicyKit Policy Configuration 1.0//EN"
+  "http://www.freedesktop.org/standards/PolicyKit/1/policyconfig.dtd">
+<!--
+  /usr/share/polkit-1/actions/de.fsembedded.fsupdate1.policy
+  Polkit action definitions for the F&S Update Framework service.
+
+  Installed by: fs-updater-service Yocto recipe
+
+  Authorization levels used:
+    yes            — always allowed (read-only, diagnostic)
+    auth_admin     — requires admin authentication each time
+    auth_admin_keep — requires admin authentication; decision cached for session
+
+  The adu user (AducIotAgent) is granted the privileged actions via a
+  separate polkit rule file:
+    /etc/polkit-1/rules.d/50-fsupdate.rules
+-->
+<policyconfig>
+
+  <vendor>F&amp;S Elektronik Systeme GmbH</vendor>
+  <vendor_url>https://www.fs-net.de</vendor_url>
+
+  <!-- ── Read-only / diagnostic ─────────────────────────────────────── -->
+
+  <action id="de.fsembedded.fsupdate1.check-update-available">
+    <description>Check whether an update is available</description>
+    <message>Authentication is required to check for a pending update.</message>
+    <defaults>
+      <allow_any>yes</allow_any>
+      <allow_inactive>yes</allow_inactive>
+      <allow_active>yes</allow_active>
+    </defaults>
+  </action>
+
+  <action id="de.fsembedded.fsupdate1.get-state">
+    <description>Read the current update service state</description>
+    <message>Authentication is required to read the update state.</message>
+    <defaults>
+      <allow_any>yes</allow_any>
+      <allow_inactive>yes</allow_inactive>
+      <allow_active>yes</allow_active>
+    </defaults>
+  </action>
+
+  <!-- ── Download phase ────────────────────────────────────────────── -->
+
+  <action id="de.fsembedded.fsupdate1.start-download">
+    <description>Register an incoming update download</description>
+    <message>Authentication is required to start an update download.</message>
+    <defaults>
+      <allow_any>auth_admin</allow_any>
+      <allow_inactive>auth_admin</allow_inactive>
+      <allow_active>auth_admin_keep</allow_active>
+    </defaults>
+  </action>
+
+  <action id="de.fsembedded.fsupdate1.report-download-progress">
+    <description>Report download progress to the update service</description>
+    <message>Authentication is required to update download progress.</message>
+    <defaults>
+      <allow_any>auth_admin</allow_any>
+      <allow_inactive>auth_admin</allow_inactive>
+      <allow_active>auth_admin_keep</allow_active>
+    </defaults>
+  </action>
+
+  <action id="de.fsembedded.fsupdate1.finish-download">
+    <description>Notify the update service that a download has completed</description>
+    <message>Authentication is required to complete an update download.</message>
+    <defaults>
+      <allow_any>auth_admin</allow_any>
+      <allow_inactive>auth_admin</allow_inactive>
+      <allow_active>auth_admin_keep</allow_active>
+    </defaults>
+  </action>
+
+  <!-- ── Install phase ─────────────────────────────────────────────── -->
+
+  <action id="de.fsembedded.fsupdate1.start-install">
+    <description>Start installation of a downloaded update</description>
+    <message>Authentication is required to install an update.</message>
+    <defaults>
+      <allow_any>auth_admin</allow_any>
+      <allow_inactive>auth_admin</allow_inactive>
+      <allow_active>auth_admin_keep</allow_active>
+    </defaults>
+  </action>
+
+  <action id="de.fsembedded.fsupdate1.install-local">
+    <description>Install a local update bundle</description>
+    <message>Authentication is required to install a local update bundle.</message>
+    <defaults>
+      <allow_any>auth_admin</allow_any>
+      <allow_inactive>auth_admin</allow_inactive>
+      <allow_active>auth_admin_keep</allow_active>
+    </defaults>
+  </action>
+
+  <action id="de.fsembedded.fsupdate1.cancel-install">
+    <description>Cancel an in-progress installation</description>
+    <message>Authentication is required to cancel an installation.</message>
+    <defaults>
+      <allow_any>auth_admin</allow_any>
+      <allow_inactive>auth_admin</allow_inactive>
+      <allow_active>auth_admin_keep</allow_active>
+    </defaults>
+  </action>
+
+  <!-- ── Apply / Rollback / Commit ─────────────────────────────────── -->
+
+  <action id="de.fsembedded.fsupdate1.apply">
+    <description>Commit an installed update and schedule reboot if required</description>
+    <message>Authentication is required to apply an update.</message>
+    <defaults>
+      <allow_any>auth_admin</allow_any>
+      <allow_inactive>auth_admin</allow_inactive>
+      <allow_active>auth_admin_keep</allow_active>
+    </defaults>
+  </action>
+
+  <action id="de.fsembedded.fsupdate1.rollback">
+    <description>Roll back to the previous software version</description>
+    <message>Authentication is required to roll back an update.</message>
+    <defaults>
+      <allow_any>auth_admin</allow_any>
+      <allow_inactive>auth_admin</allow_inactive>
+      <allow_active>auth_admin_keep</allow_active>
+    </defaults>
+  </action>
+
+  <action id="de.fsembedded.fsupdate1.commit">
+    <description>Confirm a pending update after reboot</description>
+    <message>Authentication is required to commit an update.</message>
+    <defaults>
+      <allow_any>auth_admin</allow_any>
+      <allow_inactive>auth_admin</allow_inactive>
+      <allow_active>auth_admin_keep</allow_active>
+    </defaults>
+  </action>
+
+</policyconfig>

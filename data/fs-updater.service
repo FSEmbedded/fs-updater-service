@@ -1,0 +1,60 @@
+[Unit]
+Description=F&S Update Framework D-Bus Service
+Documentation=https://github.com/FSEmbedded/fs-updater-service
+Requires=dbus.service
+Wants=rauc.service
+After=dbus.service rauc.service
+Before=deviceupdate-agent.service
+
+[Service]
+Type=dbus
+BusName=de.fsembedded.fsupdate1
+ExecStart=/usr/sbin/fs-updater-service
+Restart=on-failure
+RestartSec=5
+User=root
+
+# Resource & scheduling tuning. Defaults are sized for single-core
+# targets where every PropertiesChanged emission steals CPU from the
+# install worker; multi-core BSPs can lift the limits via drop-in at
+# /etc/systemd/system/fs-updater.service.d/board.conf.
+#
+#   Nice=5             keeps property reads responsive while the
+#                      worker drives RAUC; the worker itself drops
+#                      further (FSUPDATE_WORKER_NICE) once the env
+#                      knobs land.
+#   CPUWeight=50       moderate share; system services stay snappy.
+#   IOSchedulingClass=best-effort + Prio=7  RAUC/eMMC writes don't
+#                      starve other consumers.
+#   OOMScoreAdjust=-500  install survives memory pressure rather
+#                      than getting killed mid-write.
+#   MemoryHigh/Max     forces v2.0 streaming behaviour — a bundle
+#                      staged on tmpfs hits the ceiling and fails
+#                      loudly, surfacing config mistakes early.
+#                      BSPs still on v1.0 containers must override.
+#   LimitNOFILE=4096   sd-bus + RAUC subscriptions + lib fds.
+Nice=5
+CPUWeight=50
+IOSchedulingClass=best-effort
+IOSchedulingPriority=7
+OOMScoreAdjust=-500
+MemoryHigh=128M
+MemoryMax=256M
+LimitNOFILE=4096
+
+# Worker-tuning knobs read at service construction. See service.h
+# for rationale; override per-board via the drop-in file above.
+#   FSUPDATE_PROGRESS_MS   min ms between InstallProgress emissions
+#                          (0 disables; 100 % always fires)
+#   FSUPDATE_WORKER_NICE   nice() applied on worker thread entry
+#   FSUPDATE_WORKER_IOPRIO best-effort I/O priority 0..7
+#   FSUPDATE_INHIBIT_SLEEP non-zero takes a logind Inhibit fd for
+#                          shutdown:sleep:idle while install runs;
+#                          0 disables (use on systems without logind)
+Environment=FSUPDATE_PROGRESS_MS=250
+Environment=FSUPDATE_WORKER_NICE=5
+Environment=FSUPDATE_WORKER_IOPRIO=7
+Environment=FSUPDATE_INHIBIT_SLEEP=1
+
+[Install]
+WantedBy=multi-user.target

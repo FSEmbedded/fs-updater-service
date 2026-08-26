@@ -1,0 +1,15 @@
+// /etc/polkit-1/rules.d/50-fsupdate.rules
+//
+// Grant the adu user (AducIotAgent) unconditional access to all
+// de.fsembedded.fsupdate1 privileged actions. The adu user has no
+// interactive session so it cannot complete an auth_admin challenge;
+// this rule bypasses polkit's authentication dialog for that user only.
+//
+// Installed by: fs-updater-service Yocto recipe
+
+polkit.addRule(function(action, subject) {
+    if (action.id.indexOf("de.fsembedded.fsupdate1.") === 0 &&
+        subject.user === "adu") {
+        return polkit.Result.YES;
+    }
+});

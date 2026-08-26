@@ -1,0 +1,13 @@
+# /usr/share/dbus-1/system-services/de.fsembedded.fsupdate1.service
+# D-Bus system service activation file for the F&S Update Framework.
+#
+# Tells dbus-daemon to auto-activate the service via systemd when a client
+# first calls a method on de.fsembedded.fsupdate1.
+#
+# Installed by: fs-updater-service Yocto recipe
+
+[D-BUS Service]
+Name=de.fsembedded.fsupdate1
+Exec=/bin/false
+SystemdService=fs-updater.service
+User=root
