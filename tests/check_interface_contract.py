@@ -2,12 +2,9 @@
 """Fail the build when the published interface and the exported vtable disagree.
 
 The XML is documentation: nothing parses it at runtime, so a method could be
-exported without ever appearing there.
-
-The file is also not well-formed XML, and predates this check being so: CLI
-flags inside comments carry a double hyphen, which XML forbids there. Comments
-are therefore stripped before parsing. That is a workaround, not an
-endorsement -- a contract no tool can read is a contract nothing checks.
+exported without ever appearing there. The file is parsed as plain XML with no
+pre-processing, so a malformed contract (for example a double hyphen inside a
+comment) fails here instead of being worked around.
 """
 
 import re
@@ -17,8 +14,16 @@ from pathlib import Path
 
 
 def documented_methods(xml_path: Path) -> set[str]:
-    raw = xml_path.read_text()
-    root = ET.fromstring(re.sub(r"<!--.*?-->", "", raw, flags=re.S))
+    try:
+        root = ET.parse(xml_path).getroot()
+    except ET.ParseError as exc:
+        # Say what is wrong with the contract rather than ending in a
+        # traceback: this check is the only reader that would notice.
+        raise SystemExit(
+            f"the published interface is not well-formed XML: {xml_path}: {exc}\n"
+            "a double hyphen inside a comment is the usual cause; write CLI "
+            "flags without their leading dashes"
+        )
     return {m.get("name") for m in root.iter("method")}
 
 

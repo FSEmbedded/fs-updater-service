@@ -11,6 +11,11 @@
   Clients     : fs-updater CLI (cloud-flow flags), ADU update handler
                 (libfus_update_1.so loaded by AducIotAgent)
 
+  Notation    : CLI flags appear here without their leading double dash. XML
+                forbids that character pair inside a comment, and this file is
+                the interface's published form, so it has to parse with an
+                ordinary parser.
+
   Session token
   ─────────────
   StartDownload returns a uint32 session_id — a monotonically incrementing
@@ -42,14 +47,14 @@
 
   Install ownership
   ─────────────────
-  The CLI cloud-flow flag --install_update triggers StartInstall. The service
+  The CLI cloud-flow flag `install_update` triggers StartInstall. The service
   drives FSUpdate::update_image() through fs-updater-lib. The ADU handler's
   Install() subscribes to InstallCompleted, then reads InstallState to handle
   the case where the signal fired before subscription.
 
   Apply / Rollback ownership
   ──────────────────────────
-  The CLI cloud-flow flags --apply_update and --rollback_update call Apply
+  The CLI cloud-flow flags `apply_update` and `rollback_update` call Apply
   and Rollback. These operate on durable lib state (U-Boot variables, RAUC
   slot status) that survives service restarts, so no session_id is needed.
   Apply() returns whether a reboot is mandatory; the ADU handler issues it
@@ -80,7 +85,7 @@
     <!--
       CheckUpdateAvailable
 
-      Caller : CLI --is_update_available
+      Caller : CLI `is_update_available`
 
       Queries the lib state machine to determine whether an update is pending
       (downloaded but not yet committed). Maps to the lib's getUpdateRebootState()
@@ -173,7 +178,7 @@
     <!--
       StartInstall
 
-      Caller : CLI --install_update (replaces the installUpdate marker file).
+      Caller : CLI `install_update` (replaces the installUpdate marker file).
 
       The service looks up the payload path recorded by FinishDownload and
       calls FSUpdate::update_image() asynchronously. Returns as soon as the
@@ -201,7 +206,7 @@
     <!--
       InstallLocal
 
-      Caller : CLI --update_install <path> (unified local install path).
+      Caller : CLI `update_install <path>` (unified local install path).
 
       Mints a fresh session and drives FSUpdate::update_image() against a
       bundle that is already on disk (USB stick, downloader output, etc.).
@@ -253,7 +258,7 @@
     <!--
       Apply
 
-      Caller : CLI --apply_update cloud-mode (replaces the applyUpdate marker file).
+      Caller : CLI `apply_update` cloud-mode (replaces the applyUpdate marker file).
 
       Apply does NOT commit and does NOT resolve any INCOMPLETE_* state; it
       writes nothing at all. The install already put the target slot at the
@@ -283,7 +288,7 @@
     <!--
       Rollback
 
-      Caller : ADU handler Rollback() — CLI --rollback_update is local-flow only and calls FSUpdate directly.
+      Caller : ADU handler Rollback() — CLI `rollback_update` is local-flow only and calls FSUpdate directly.
 
       Initiates a rollback through FSUpdate. After rollback the service
       resets to idle state. RebootPending may be set if the firmware rollback
@@ -321,7 +326,7 @@
       the update; it makes the device un-updateable while the boot budget
       erodes toward a fallback.
 
-      Does not replace the CLI's local --commit_update, which calls the library
+      Does not replace the CLI's local `commit_update`, which calls the library
       directly: the boot-time confirm runs before this daemon is necessarily
       up, so routing it through D-Bus would add a boot ordering dependency.
       Both paths converge on the same durable state.
