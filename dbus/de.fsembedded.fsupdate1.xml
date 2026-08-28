@@ -57,7 +57,7 @@
       replacing it. A caller that must act on *what* failed subscribes to it;
       one that only needs success or failure keeps the signal it has.
     - A method rejection carries the same categories as a named error, added at
-      InterfaceVersion 3 — see "Error names" below. Before that every failure
+      InterfaceVersion 3 and extended at 4 — see "Error names" below. Before that every failure
       arrived as `org.freedesktop.DBus.Error.Failed` with `-EIO`, which is
       still what an unmapped category answers, so nothing a caller relied on
       moved.
@@ -100,10 +100,13 @@
     de.fsembedded.fsupdate1.Error.UpdateInProgress  (-EIO)
         Another update is uncommitted.
 
+    de.fsembedded.fsupdate1.Error.NothingToApply    (-EIO)
+        The caller asked to apply and there is nothing pending. Not a failure
+        of the update path — the answer "no work to do", which a caller acts on
+        differently. It shared Error.Internal until InterfaceVersion 4.
+
     de.fsembedded.fsupdate1.Error.Internal          (-EIO)
-        Any other failure inside the library. Note the breadth: "nothing to
-        apply" arrives here too, indistinguishable from a genuine internal
-        failure. Giving that case its own category is future work.
+        Any other failure inside the library.
 
     org.freedesktop.DBus.Error.Failed               (-EIO, -EINVAL, or a read
                                                      error, per site)
@@ -112,7 +115,7 @@
         generic — inventing a name for it would suggest a meaning it does not
         have. Do not read its errno as a contract.
 
-  The four category names arrived at InterfaceVersion 3 and mirror the `kind`
+  The category names mirror the `kind`
   tokens the install outcome publishes: that is what makes the method door and
   the signal door one vocabulary rather than two. A caller written against an
   older version sees the generic name where it used to, and nothing it relied

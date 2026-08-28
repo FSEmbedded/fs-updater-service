@@ -55,7 +55,7 @@ static constexpr const char* INTERFACE = "de.fsembedded.fsupdate1";
  * changes raise it; the trailing 1 in the interface name is what a breaking
  * change would move instead. The rules are in the contract, and this number is
  * meaningless without them. */
-static constexpr uint32_t FSUPDATE_INTERFACE_VERSION = 3;
+static constexpr uint32_t FSUPDATE_INTERFACE_VERSION = 4;
 
 /* Distinct D-Bus error name for "a conflicting operation is already in
  * flight". Every busy rejection uses this name + -EBUSY so the client can
@@ -102,6 +102,7 @@ static const char* error_name_for(const std::string& kind)
     if (kind == "not_allowed_state")  { return "de.fsembedded.fsupdate1.Error.NotAllowedState"; }
     if (kind == "update_in_progress") { return "de.fsembedded.fsupdate1.Error.UpdateInProgress"; }
     if (kind == "internal")           { return "de.fsembedded.fsupdate1.Error.Internal"; }
+    if (kind == "nothing_to_apply")   { return "de.fsembedded.fsupdate1.Error.NothingToApply"; }
     return SD_BUS_ERROR_FAILED;
 }
 

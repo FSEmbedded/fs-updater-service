@@ -1969,3 +1969,20 @@ TEST_F(ServiceTest, ANegativeErrnoDoesNotInvertIntoSuccess)
     EXPECT_LT(r, 0) << "a rejection must not return a non-negative value";
     EXPECT_EQ(r, -EIO);
 }
+
+/* "Nothing to apply" is the case the command-line tool separates locally and
+ * the bus could not: it shared Error.Internal with every genuine internal
+ * failure. The library gained its own category for it; this pins that the name
+ * follows. */
+TEST_F(ServiceTest, NothingToApply_ReportsItsOwnName)
+{
+    mock_->arm_failure("nothing_to_apply", 0);
+
+    /* Driven through Commit, not Apply: Apply has a state gate of its own that
+     * refuses before the adapter is reached, so it would measure that gate
+     * rather than the category. The category is what is under test. */
+    std::string name;
+    const int r = call_commit(make_msg("Commit"), &name);
+    EXPECT_EQ(name, "de.fsembedded.fsupdate1.Error.NothingToApply");
+    EXPECT_EQ(r, -EIO);
+}
