@@ -375,7 +375,15 @@
       Does not replace the CLI's local `commit_update`, which calls the library
       directly: the boot-time confirm runs before this daemon is necessarily
       up, so routing it through D-Bus would add a boot ordering dependency.
-      Both paths converge on the same durable state.
+
+      Both paths converge on the same durable state, and what makes them
+      converge is named rather than assumed: every write goes through the
+      environment library, which takes a blocking lock around it, so the two
+      writers serialise whatever order they start in. The unit additionally
+      declares After=fus-update-confirm.service — the direction that costs
+      nothing — so a caller reaching the bus does not race a confirm still
+      deciding. That ordering records the intent; the lock is the guarantee,
+      and it is the one to check if this ever appears to fail.
 
       Out: committed — true if a pending update was confirmed; false if there
       was nothing to confirm.
