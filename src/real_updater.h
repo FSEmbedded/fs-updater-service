@@ -3,6 +3,7 @@
 #include "service.h"
 
 #include <fs_update_framework/handle_update/fsupdate.h>
+#include <fs_update_framework/handle_update/error_mapping.h>
 #include <fs_update_framework/handle_update/inspect_bundle.h>
 #include <fs_update_framework/logger/LoggerHandler.h>
 

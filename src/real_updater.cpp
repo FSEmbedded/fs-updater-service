@@ -56,7 +56,23 @@ void RealUpdater::update_image(std::string type, std::string path)
      * types; let the lib re-derive them. */
     (void)type;
     std::string detect{};
-    m_fsu->update_image(path, detect, installed_update_type);
+    /* Carry the library's own failure category across the interface, once,
+     * here -- the only place that legitimately knows both sides. Callers
+     * upstream act on `kind` and `errorno` instead of matching on the sentence,
+     * which the library is deliberately free to improve.
+     *
+     * The classification is the library's, not a ladder rewritten here: it is
+     * append-only, ABI-stable and covered by the library's own tests, and a
+     * second copy would drift from it on the next exception type -- which is
+     * the very failure this change exists to stop. It dispatches by re-raising
+     * inside a catch block, so it needs no dynamic_cast (which this project
+     * bans). */
+    try {
+        m_fsu->update_image(path, detect, installed_update_type);
+    } catch (const std::exception& e) {
+        const fs::ErrorInfo info = fs::classify_active_exception();
+        throw UpdaterError(e.what(), info.errno_val, std::string(fs::describe(info.code)));
+    }
 }
 
 bool RealUpdater::apply_pending_update(const std::string& /*type*/)

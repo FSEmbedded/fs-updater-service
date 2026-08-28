@@ -55,7 +55,7 @@ static constexpr const char* INTERFACE = "de.fsembedded.fsupdate1";
  * changes raise it; the trailing 1 in the interface name is what a breaking
  * change would move instead. The rules are in the contract, and this number is
  * meaningless without them. */
-static constexpr uint32_t FSUPDATE_INTERFACE_VERSION = 1;
+static constexpr uint32_t FSUPDATE_INTERFACE_VERSION = 2;
 
 /* Distinct D-Bus error name for "a conflicting operation is already in
  * flight". Every busy rejection uses this name + -EBUSY so the client can
@@ -221,6 +221,15 @@ int Service::on_wakeup(sd_event_source* /*src*/, int fd, uint32_t /*revents*/, v
                 "InstallState", "InstallProgress", nullptr);
             sd_bus_emit_signal(svc->m_bus, OBJ_PATH, INTERFACE, "InstallCompleted",
                 "ubs", svc->m_session_id, static_cast<int>(ok), msg.c_str());
+            /* The same outcome with the cause attached. A separate signal
+             * rather than a wider InstallCompleted: extending a published
+             * signature is invisible to a caller reading the leading fields
+             * and fatal to a generated proxy that checks the whole thing.
+             * Existing subscribers keep the signal they subscribed to. */
+            sd_bus_emit_signal(svc->m_bus, OBJ_PATH, INTERFACE, "InstallOutcome",
+                "ubis", svc->m_session_id, static_cast<int>(ok),
+                cancelled ? 0 : ev.errorno,
+                (cancelled ? "cancelled" : (ok ? "" : ev.kind.c_str())));
         } else {
             svc->m_install_state = "failed";
             sd_bus_emit_properties_changed(svc->m_bus, OBJ_PATH, INTERFACE,
@@ -490,7 +499,7 @@ void Service::spawn_install_worker(const std::string& update_type,
             last_pct = pct;
             last_t   = now;
 
-            PendingEvent ev{PendingEvent::Progress, pct, false, {}};
+            PendingEvent ev{PendingEvent::Progress, pct, false, {}, 0, {}};
             {
                 std::lock_guard<std::mutex> lk(svc->m_pending_mtx);
                 svc->m_pending.push_back(std::move(ev));
@@ -533,18 +542,25 @@ void Service::spawn_install_worker(const std::string& update_type,
         }
 
         PendingEvent result;
+        /* UpdaterError first: it is the arm that carries a cause a caller can
+         * act on. The adapter translates the library's kinds into it, so this
+         * loop stays free of library types and a test double can express a
+         * failure without linking the library. */
         try {
             svc->m_updater->update_image(update_type, payload_path);
-            result = PendingEvent{PendingEvent::Completed, 100, true, {}};
+            result = PendingEvent{PendingEvent::Completed, 100, true, {}, 0, {}};
+        } catch (const UpdaterError& e) {
+            result = PendingEvent{PendingEvent::Completed, 0, false,
+                                  std::string(e.what()), e.errorno, e.kind};
         } catch (const std::exception& e) {
             result = PendingEvent{PendingEvent::Completed, 0, false,
-                                  std::string(e.what())};
+                                  std::string(e.what()), 0, "system"};
         } catch (...) {
             /* A non-std exception escaping the thread would call
              * std::terminate and take the whole service down without
              * ever emitting InstallCompleted. */
             result = PendingEvent{PendingEvent::Completed, 0, false,
-                                  "install failed: unknown exception"};
+                                  "install failed: unknown exception", 0, "unknown"};
         }
         {
             std::lock_guard<std::mutex> lk(svc->m_pending_mtx);
@@ -1129,6 +1145,9 @@ const sd_bus_vtable Service::service_vtable[] = {
     SD_BUS_PROPERTY("RebootPending",    "b", prop_reboot_pending,    0, SD_BUS_VTABLE_PROPERTY_EMITS_CHANGE),
 
     SD_BUS_SIGNAL("InstallCompleted", "ubs", 0),
+    /* The machine-readable half of the same event. Emitted alongside, never
+     * instead of, InstallCompleted. */
+    SD_BUS_SIGNAL("InstallOutcome",   "ubis", 0),
     SD_BUS_SIGNAL("JobFailed",        "us",  0),
 
     SD_BUS_VTABLE_END

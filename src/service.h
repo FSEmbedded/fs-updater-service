@@ -8,11 +8,42 @@
 #include <functional>
 #include <memory>
 #include <mutex>
+#include <stdexcept>
 #include <string>
 #include <thread>
 #include <vector>
 
 /* ── IUpdater — pure-abstract interface for testability ────────────────── */
+
+/* What an updater implementation raises when an operation fails, carrying the
+ * two facts a caller can act on beside the sentence a human reads.
+ *
+ * It lives here rather than being the library's own exception type on purpose.
+ * This interface exists so the service can be driven by a double; if the
+ * failure vocabulary were the library's, every test would have to link the
+ * library to express a failure. The adapter translates once, at the only place
+ * that legitimately knows both sides.
+ *
+ * `kind` is a short stable token, not a message. An implementation backed by
+ * the library passes the library's own category through (`fs::describe` of
+ * `fs::classify_active_exception`), so the tokens are its append-only set:
+ * "generic", "update_in_progress", "not_allowed_state", "internal", "system".
+ * A double may use any of them. Two further tokens exist that no
+ * implementation produces, because they describe outcomes the library never
+ * sees: "cancelled" and "unknown" are set by the service itself.
+ *
+ * `errorno` is whatever errno the failure carried, 0 when none did -- note
+ * that "generic" does not guarantee a non-zero one. It tells failures apart
+ * and belongs in a log; it is NOT a code to forward, because the same numbers
+ * mean different things on different verbs.
+ */
+class UpdaterError : public std::runtime_error {
+public:
+    UpdaterError(const std::string& what, int err, std::string k)
+        : std::runtime_error(what), errorno(err), kind(std::move(k)) {}
+    int         errorno;
+    std::string kind;
+};
 
 struct CheckUpdateInfo {
     bool        available;
@@ -62,11 +93,20 @@ public:
     Service(Service&&)                 = delete;
     Service& operator=(Service&&)      = delete;
 
+    /* `message` is for a human and is deliberately free to improve; `errorno`
+     * and `kind` are what a program acts on. They carry what the library
+     * actually said -- its errno and which exception it raised -- rather than a
+     * code from the client's exit-code table: that table is the client's to
+     * own, and duplicating it here would let the two doors drift apart.
+     * A caller translates library vocabulary into whatever it reports,
+     * which is what the client already does for its local verbs. */
     struct PendingEvent {
         enum Type { Progress, Completed, Failed } type;
         int         progress;
         bool        success;
         std::string message;
+        int         errorno = 0;   /* library errno; 0 when none was carried */
+        std::string kind;          /* library exception kind; "" on success */
     };
 
     /* ── State fields (read by property getters) ─────────────────────── */

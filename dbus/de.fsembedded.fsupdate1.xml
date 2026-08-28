@@ -52,12 +52,10 @@
       to be pattern-matched. The library's refusals are becoming more
       explanatory on purpose, so any match written against today's wording
       breaks silently on an improvement.
-    - KNOWN GAP. There is currently no machine-readable outcome beside that
-      prose: a caller that must act on *what* failed has only the boolean and
-      the sentence. Closing it means a new member carrying a code from the
-      command-line tool's exit-code table — that table is append-only and is
-      the intended shared vocabulary — which raises InterfaceVersion. It is
-      recorded here rather than left for a caller to discover.
+    - The machine-readable outcome lives in `InstallOutcome`, added at
+      InterfaceVersion 2 and emitted alongside `InstallCompleted` rather than
+      replacing it. A caller that must act on *what* failed subscribes to it;
+      one that only needs success or failure keeps the signal it has.
 
   A device whose bus surface predates all of this has no `InterfaceVersion`
   property at all; a failed read of it is itself the answer.
@@ -507,6 +505,64 @@
       <arg name="session_id" type="u"/>
       <arg name="success"    type="b"/>
       <arg name="message"    type="s"/>
+    </signal>
+
+    <!--
+      InstallOutcome            (InterfaceVersion 2 and later)
+
+      The same terminal event as InstallCompleted, carrying the cause a program
+      can act on. Emitted immediately after it, always, never instead of it — a
+      subscriber to the older signal loses nothing, and one that wants the cause
+      subscribes to this one instead of parsing a sentence.
+
+      A separate signal rather than three more fields on InstallCompleted: a
+      caller that reads the leading arguments would not notice a widened
+      signature, while a generated proxy that checks the whole signature would
+      reject the message outright. A published member is not re-typed; see
+      "Interface version and stability" above.
+
+      session_id — the session this outcome belongs to
+      success    — same value as InstallCompleted's
+      errorno    — the errno the library carried, or 0 when it carried none.
+
+                   **This is the install path's errno, and it is an open set.**
+                   It is whatever the failing operation reported — ENOENT for a
+                   payload file that is gone by the time the install starts
+                   (nothing revalidates the path between FinishDownload and
+                   StartInstall), EPERM for a container holding neither a
+                   firmware nor an application member, and any errno an
+                   underlying mkdir/open/read produced (EACCES, ENOSPC, EROFS,
+                   EINVAL, …).
+
+                   Do NOT map these to the command-line tool's 54 / 56. Those
+                   codes belong to the *slot* verbs, where ENOENT means "target
+                   slot never provisioned" and EPERM means "target marked bad".
+                   The same numbers mean something else here, and translating
+                   them across would report a missing bundle as a bad slot.
+                   Use `errorno` to tell failures apart and to log, not as a
+                   code to hand on unchanged.
+
+      kind       — the library's own failure category, as it names it. The
+                   token set is the library's `fs::Error`, which is append-only
+                   and ABI-stable, plus two the service adds for outcomes the
+                   library never sees:
+                     ""                   success
+                     "cancelled"          the caller cancelled; errorno is 0
+                     "generic"            a library failure that MAY carry an
+                                          errno; 0 means none was carried
+                     "update_in_progress" another update is uncommitted
+                     "not_allowed_state"  the durable state forbids it
+                     "internal"           any other library failure
+                     "system"             a failure outside the library
+                     "unknown"            a non-standard exception was caught
+                   The set may grow — a caller must treat an unrecognised token
+                   as a plain failure rather than refusing to parse.
+    -->
+    <signal name="InstallOutcome">
+      <arg name="session_id" type="u"/>
+      <arg name="success"    type="b"/>
+      <arg name="errorno"    type="i"/>
+      <arg name="kind"       type="s"/>
     </signal>
 
     <!--
