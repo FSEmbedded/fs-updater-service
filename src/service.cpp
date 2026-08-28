@@ -55,7 +55,7 @@ static constexpr const char* INTERFACE = "de.fsembedded.fsupdate1";
  * changes raise it; the trailing 1 in the interface name is what a breaking
  * change would move instead. The rules are in the contract, and this number is
  * meaningless without them. */
-static constexpr uint32_t FSUPDATE_INTERFACE_VERSION = 2;
+static constexpr uint32_t FSUPDATE_INTERFACE_VERSION = 3;
 
 /* Distinct D-Bus error name for "a conflicting operation is already in
  * flight". Every busy rejection uses this name + -EBUSY so the client can
@@ -86,6 +86,38 @@ static int reject_no_updater(sd_bus_error* e)
 {
     sd_bus_error_set(e, ERROR_NO_UPDATER, "updater not available");
     return -ENOSYS;
+}
+
+/* One error name per library failure category, so a method rejection says what
+ * kind of failure it was instead of collapsing every one into Error.Failed and
+ * -EIO. The names mirror the categories the install outcome publishes, which is
+ * what makes the two doors one vocabulary rather than two.
+ *
+ * "system" and anything unmapped stay on the generic name deliberately: they
+ * are the categories that carry no promise about their cause, and inventing a
+ * name for them would suggest one. */
+static const char* error_name_for(const std::string& kind)
+{
+    if (kind == "generic")            { return "de.fsembedded.fsupdate1.Error.Generic"; }
+    if (kind == "not_allowed_state")  { return "de.fsembedded.fsupdate1.Error.NotAllowedState"; }
+    if (kind == "update_in_progress") { return "de.fsembedded.fsupdate1.Error.UpdateInProgress"; }
+    if (kind == "internal")           { return "de.fsembedded.fsupdate1.Error.Internal"; }
+    return SD_BUS_ERROR_FAILED;
+}
+
+/* Reject with the failure's own category. The NAME is what a bus caller acts
+ * on -- the returned errno does not cross the wire, a client derives its own
+ * from the name -- so the category names above are the contract and this errno
+ * only serves an in-process caller.
+ *
+ * Guarded on > 0 rather than != 0: UpdaterError takes an unchecked int and the
+ * interface exists to be driven by a double, so a negative value would negate
+ * into a positive return and read as success. Where no errno was carried, -EIO
+ * stands as before. */
+static int reject_updater(sd_bus_error* e, const UpdaterError& err)
+{
+    sd_bus_error_set(e, error_name_for(err.kind), err.what());
+    return err.errorno > 0 ? -err.errorno : -EIO;
 }
 
 /* ── Constructor / Destructor ───────────────────────────────────────────── */
@@ -254,6 +286,8 @@ int Service::method_check_update_available(sd_bus_message* msg, void* userdata, 
     CheckUpdateInfo info;
     try {
         info = svc->m_updater->check_update_available();
+    } catch (const UpdaterError& e) {
+        return reject_updater(ret_err, e);
     } catch (const std::exception& e) {
         sd_bus_error_set(ret_err, SD_BUS_ERROR_FAILED, e.what());
         return -EIO;
@@ -680,6 +714,8 @@ int Service::method_install_local(sd_bus_message* msg, void* userdata, sd_bus_er
     CheckUpdateInfo info;
     try {
         info = svc->m_updater->inspect_bundle(path);
+    } catch (const UpdaterError& e) {
+        return reject_updater(ret_err, e);
     } catch (const std::exception& e) {
         sd_bus_error_set(ret_err, SD_BUS_ERROR_FAILED, e.what());
         return -EIO;
@@ -785,6 +821,8 @@ int Service::method_apply(sd_bus_message* msg, void* userdata, sd_bus_error* ret
     bool reboot_req = false;
     try {
         reboot_req = svc->m_updater->apply_pending_update(svc->m_update_type);
+    } catch (const UpdaterError& e) {
+        return reject_updater(ret_err, e);
     } catch (const std::exception& e) {
         sd_bus_error_set(ret_err, SD_BUS_ERROR_FAILED, e.what());
         return -EIO;
@@ -824,6 +862,8 @@ int Service::method_rollback(sd_bus_message* msg, void* userdata, sd_bus_error* 
 
     try {
         svc->m_updater->rollback(svc->m_update_type);
+    } catch (const UpdaterError& e) {
+        return reject_updater(ret_err, e);
     } catch (const std::exception& e) {
         sd_bus_error_set(ret_err, SD_BUS_ERROR_FAILED, e.what());
         return -EIO;
@@ -873,6 +913,8 @@ int Service::method_commit(sd_bus_message* msg, void* userdata, sd_bus_error* re
     bool committed = false;
     try {
         committed = svc->m_updater->commit_update();
+    } catch (const UpdaterError& e) {
+        return reject_updater(ret_err, e);
     } catch (const std::exception& e) {
         sd_bus_error_set(ret_err, SD_BUS_ERROR_FAILED, e.what());
         return -EIO;

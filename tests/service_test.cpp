@@ -69,21 +69,40 @@ public:
         ++apply_calls_;
         if (apply_should_throw_)
             throw std::runtime_error("mock apply error");
+        raise_if_armed();
         return apply_returns_reboot_;
     }
 
     void rollback(std::string type) override {
         last_rollback_type_ = type;
         ++rollback_calls_;
+        raise_if_armed();
     }
 
     bool commit_update() override {
         ++commit_calls_;
+        raise_if_armed();
         return commit_returns_;
     }
 
     void setProgressCallback(std::function<void(int)> cb) override {
         progress_cb_ = std::move(cb);
+    }
+
+    /* Raise a categorised failure, the way the real adapter does after it has
+     * translated a library exception. A double can express this WITHOUT
+     * linking the library, which is the whole reason UpdaterError lives beside
+     * IUpdater rather than being the library's own type -- and the reason a
+     * test can pin the error name a caller will actually see. */
+    void arm_failure(const char* kind, int errorno)
+    {
+        fail_kind_    = kind;
+        fail_errorno_ = errorno;
+        fail_armed_   = true;
+    }
+    void raise_if_armed()
+    {
+        if (fail_armed_) throw UpdaterError("mock categorised failure", fail_errorno_, fail_kind_);
     }
 
     void arm_install()     { install_gate_.arm(); }
@@ -94,6 +113,9 @@ public:
     bool                     update_should_throw_  = false;
     bool                     update_should_throw_nonstd_ = false;
     bool                     apply_should_throw_   = false;
+    bool                     fail_armed_           = false;
+    std::string              fail_kind_;
+    int                      fail_errorno_         = 0;
     bool                     apply_returns_reboot_ = true;
     bool                     commit_returns_       = true;
     std::atomic<int>         check_calls_{0};
@@ -1862,4 +1884,88 @@ TEST_F(ServiceTest, Commit_ClearsStateAfterSuccess)
     EXPECT_EQ(svc_->m_update_type, "");
     EXPECT_EQ(svc_->m_update_version, "");
     EXPECT_EQ(svc_->m_update_size, 0u);
+}
+
+/* ── The failure category reaches a caller as a name ──────────────────────
+ *
+ * A rejection crosses the bus as a name, not as the handler's errno: a client
+ * derives its own errno from the name, and an unregistered name yields EIO
+ * whatever was returned. So the NAME is the contract, and these cases pin it
+ * per category, on a real verb, through the real handler.
+ *
+ * The double raises the categorised failure directly, without linking the
+ * library -- which is what UpdaterError living beside IUpdater buys, and why
+ * this is testable at all.
+ */
+
+TEST_F(ServiceTest, GenericFailure_ReportsItsOwnNameAndErrno)
+{
+    mock_->arm_failure("generic", ENOENT);
+
+    std::string name;
+    const int r = call_commit(make_msg("Commit"), &name);
+    EXPECT_EQ(name, "de.fsembedded.fsupdate1.Error.Generic");
+    /* The one category that carries an errno: it survives to an in-process
+     * caller rather than being flattened to EIO. */
+    EXPECT_EQ(r, -ENOENT);
+}
+
+TEST_F(ServiceTest, NotAllowedStateFailure_ReportsItsOwnName)
+{
+    mock_->arm_failure("not_allowed_state", 0);
+
+    std::string name;
+    const int r = call_commit(make_msg("Commit"), &name);
+    EXPECT_EQ(name, "de.fsembedded.fsupdate1.Error.NotAllowedState");
+    EXPECT_EQ(r, -EIO);
+}
+
+TEST_F(ServiceTest, UpdateInProgressFailure_ReportsItsOwnName)
+{
+    mock_->arm_failure("update_in_progress", 0);
+
+    std::string name;
+    const int r = call_rollback(make_msg("Rollback"), &name);
+    EXPECT_EQ(name, "de.fsembedded.fsupdate1.Error.UpdateInProgress");
+    EXPECT_EQ(r, -EIO);
+}
+
+TEST_F(ServiceTest, InternalFailure_ReportsItsOwnName)
+{
+    mock_->arm_failure("internal", 0);
+
+    std::string name;
+    const int r = call_rollback(make_msg("Rollback"), &name);
+    EXPECT_EQ(name, "de.fsembedded.fsupdate1.Error.Internal");
+    EXPECT_EQ(r, -EIO);
+}
+
+/* "system" and anything unrecognised stay on the generic name deliberately:
+ * they are the categories that promise nothing about their cause. Pinned so
+ * that a future name for them is a decision, not an accident. */
+TEST_F(ServiceTest, SystemAndUnknownCategoriesStayGeneric)
+{
+    mock_->arm_failure("system", 0);
+    std::string name;
+    EXPECT_EQ(call_commit(make_msg("Commit"), &name), -EIO);
+    EXPECT_EQ(name, "org.freedesktop.DBus.Error.Failed");
+
+    mock_->arm_failure("a-category-from-a-later-version", 0);
+    EXPECT_EQ(call_commit(make_msg("Commit"), &name), -EIO);
+    EXPECT_EQ(name, "org.freedesktop.DBus.Error.Failed");
+}
+
+/* A negative errno would negate into a positive return -- which an in-process
+ * caller reads as success. UpdaterError takes an unchecked int and the
+ * interface exists to be driven by a double, so the guard is not theoretical
+ * for anyone writing one. */
+TEST_F(ServiceTest, ANegativeErrnoDoesNotInvertIntoSuccess)
+{
+    mock_->arm_failure("generic", -EPERM);
+
+    std::string name;
+    const int r = call_commit(make_msg("Commit"), &name);
+    EXPECT_EQ(name, "de.fsembedded.fsupdate1.Error.Generic");
+    EXPECT_LT(r, 0) << "a rejection must not return a non-negative value";
+    EXPECT_EQ(r, -EIO);
 }

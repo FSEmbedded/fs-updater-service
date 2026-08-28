@@ -56,9 +56,67 @@
       InterfaceVersion 2 and emitted alongside `InstallCompleted` rather than
       replacing it. A caller that must act on *what* failed subscribes to it;
       one that only needs success or failure keeps the signal it has.
+    - A method rejection carries the same categories as a named error, added at
+      InterfaceVersion 3 — see "Error names" below. Before that every failure
+      arrived as `org.freedesktop.DBus.Error.Failed` with `-EIO`, which is
+      still what an unmapped category answers, so nothing a caller relied on
+      moved.
 
   A device whose bus surface predates all of this has no `InterfaceVersion`
   property at all; a failed read of it is itself the answer.
+
+  Error names
+  ───────────
+  **Switch on the name.** A rejection crosses the bus as a name and a message;
+  the handler's errno does not travel with it — a client's errno is derived
+  from the name, and an unregistered name yields EIO whatever the handler
+  returned. That is why every distinction worth making here has its own name.
+  The errno values noted below are what an in-process caller sees; over the bus
+  they are not an observable.
+
+  Failures the service itself decides:
+
+    de.fsembedded.fsupdate1.Error.Busy              (-EBUSY)
+        A conflicting operation is already in flight.
+
+    de.fsembedded.fsupdate1.Error.NoUpdater         (-ENOSYS)
+        The updater backend is unavailable.
+
+    org.freedesktop.DBus.Error.InvalidArgs          (-EINVAL)
+        An argument was rejected — a session id that does not match, a value
+        out of range, an update type that is not one of the three.
+
+    org.freedesktop.DBus.Error.FileNotFound         (-ENOENT)
+        The payload path does not exist or is not readable.
+
+  Failures the library reports, named by its own category:
+
+    de.fsembedded.fsupdate1.Error.Generic           (the library's errno)
+        A library failure that carried an errno.
+
+    de.fsembedded.fsupdate1.Error.NotAllowedState   (-EIO)
+        The durable update state forbids the operation.
+
+    de.fsembedded.fsupdate1.Error.UpdateInProgress  (-EIO)
+        Another update is uncommitted.
+
+    de.fsembedded.fsupdate1.Error.Internal          (-EIO)
+        Any other failure inside the library. Note the breadth: "nothing to
+        apply" arrives here too, indistinguishable from a genuine internal
+        failure. Giving that case its own category is future work.
+
+    org.freedesktop.DBus.Error.Failed               (-EIO, -EINVAL, or a read
+                                                     error, per site)
+        Everything else: a failure outside the library, a malformed message,
+        or a category that carries no promise about its cause. Deliberately
+        generic — inventing a name for it would suggest a meaning it does not
+        have. Do not read its errno as a contract.
+
+  The four category names arrived at InterfaceVersion 3 and mirror the `kind`
+  tokens the install outcome publishes: that is what makes the method door and
+  the signal door one vocabulary rather than two. A caller written against an
+  older version sees the generic name where it used to, and nothing it relied
+  on moved.
 
   Session token
   ─────────────
