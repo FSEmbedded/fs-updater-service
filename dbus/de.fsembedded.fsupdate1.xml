@@ -16,6 +16,52 @@
                 the interface's published form, so it has to parse with an
                 ordinary parser.
 
+  Interface version and stability
+  ───────────────────────────────
+  Read the `InterfaceVersion` property to learn what this device's bus surface
+  offers. It is the version of the INTERFACE; the daemon's package version is
+  a different number and moves for reasons that do not touch this file.
+
+  What moves the number, and what does not:
+
+    - Adding a method, signal or property     → InterfaceVersion + 1
+    - Widening what an existing member may
+      return within its declared type
+      (a new enum-like string value)          → InterfaceVersion + 1
+    - Fixing a defect so a member does what
+      this document already said              → unchanged
+    - Wording, comments, formatting           → unchanged
+    - Changing the signature or meaning of a
+      member callers already depend on        → NOT done here: it needs a new
+                                                interface name (the trailing 1)
+
+  The last line is the one with teeth. A signature change is invisible to a
+  caller that reads the first fields and ignores the rest, and fatal to a
+  generated proxy that checks the whole signature — so a member that has been
+  published is never re-typed in place. New information arrives as a new
+  member, and a caller that finds InterfaceVersion too low simply does not use
+  it.
+
+  Stability of what is here today:
+
+    - FIXED. The session-token protocol, the install and commit methods and
+      their meanings, the `InstallCompleted` and `JobFailed` signatures, and
+      the property names and types listed below. Callers may depend on these.
+    - PROVISIONAL. The free-text `message` in `InstallCompleted` and the
+      `reason` in `JobFailed`: human-readable, deliberately improving, and NOT
+      to be pattern-matched. The library's refusals are becoming more
+      explanatory on purpose, so any match written against today's wording
+      breaks silently on an improvement.
+    - KNOWN GAP. There is currently no machine-readable outcome beside that
+      prose: a caller that must act on *what* failed has only the boolean and
+      the sentence. Closing it means a new member carrying a code from the
+      command-line tool's exit-code table — that table is append-only and is
+      the intended shared vocabulary — which raises InterfaceVersion. It is
+      recorded here rather than left for a caller to discover.
+
+  A device whose bus surface predates all of this has no `InterfaceVersion`
+  property at all; a failed read of it is itself the answer.
+
   Session token
   ─────────────
   StartDownload returns a uint32 session_id — a monotonically incrementing
@@ -369,6 +415,20 @@
     <!-- ═══════════════════════════════════════════════════════════════
          Properties (all read-only; changes emitted via PropertiesChanged)
          ═══════════════════════════════════════════════════════════════ -->
+
+    <!--
+      The version of THIS interface, not of the daemon. A caller sees only the
+      bus, and the two numbers do not move together: the daemon's package
+      version moves for reasons that leave the bus surface untouched.
+
+      Read it before deciding which members to use. Constant while the daemon
+      runs, so it may be read once and cached; it does not emit
+      PropertiesChanged.
+
+      What moves it, and what does not — see "Interface version and stability"
+      below.
+    -->
+    <property name="InterfaceVersion" type="u" access="read"/>
 
     <!--
       Current session generation counter. 0 = no active session.

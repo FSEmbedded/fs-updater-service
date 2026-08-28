@@ -166,6 +166,7 @@ private:
     static int method_get_state             (sd_bus_message* msg, void* userdata, sd_bus_error* ret_err);
 
     /* ── Property getters ────────────────────────────────────────────── */
+    static int prop_interface_version (sd_bus* bus, const char* path, const char* iface, const char* prop, sd_bus_message* reply, void* userdata, sd_bus_error* err);
     static int prop_session_id        (sd_bus* bus, const char* path, const char* iface, const char* prop, sd_bus_message* reply, void* userdata, sd_bus_error* err);
     static int prop_update_available  (sd_bus* bus, const char* path, const char* iface, const char* prop, sd_bus_message* reply, void* userdata, sd_bus_error* err);
     static int prop_update_type       (sd_bus* bus, const char* path, const char* iface, const char* prop, sd_bus_message* reply, void* userdata, sd_bus_error* err);

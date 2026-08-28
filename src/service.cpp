@@ -50,6 +50,13 @@ int read_env_int_or(const char* name, int dflt, int lo, int hi)
 static constexpr const char* OBJ_PATH  = "/de/fsembedded/fsupdate1";
 static constexpr const char* INTERFACE = "de.fsembedded.fsupdate1";
 
+/* The interface's own version, independent of the daemon's package version --
+ * a caller sees only the bus, and the two do not move together. Additive
+ * changes raise it; the trailing 1 in the interface name is what a breaking
+ * change would move instead. The rules are in the contract, and this number is
+ * meaningless without them. */
+static constexpr uint32_t FSUPDATE_INTERFACE_VERSION = 1;
+
 /* Distinct D-Bus error name for "a conflicting operation is already in
  * flight". Every busy rejection uses this name + -EBUSY so the client can
  * tell busy apart from bad arguments (-EINVAL) or a missing updater
@@ -1008,6 +1015,18 @@ int Service::prop_update_available(sd_bus* /*bus*/, const char* /*path*/,
     return sd_bus_message_append(reply, "b", (int)svc->m_update_available);
 }
 
+/* What a caller may rely on, asked at runtime rather than guessed from the
+ * daemon's package version -- the two move independently, and a caller can only
+ * see the bus. Read the section "Interface version and stability" in the
+ * contract before changing this number: it says which changes leave it alone
+ * and which one requires a new interface name. */
+int Service::prop_interface_version(sd_bus* /*bus*/, const char* /*path*/,
+                                     const char* /*iface*/, const char* /*prop*/,
+                                     sd_bus_message* reply, void* /*userdata*/, sd_bus_error* /*err*/)
+{
+    return sd_bus_message_append(reply, "u", (uint32_t)FSUPDATE_INTERFACE_VERSION);
+}
+
 int Service::prop_update_type(sd_bus* /*bus*/, const char* /*path*/,
                                const char* /*iface*/, const char* /*prop*/,
                                sd_bus_message* reply, void* userdata, sd_bus_error* /*err*/)
@@ -1096,6 +1115,9 @@ const sd_bus_vtable Service::service_vtable[] = {
     SD_BUS_METHOD("GetState",               "",    "a{sv}",method_get_state,                 SD_BUS_VTABLE_UNPRIVILEGED),
 
     SD_BUS_PROPERTY("SessionId",        "u", prop_session_id,        0, SD_BUS_VTABLE_PROPERTY_EMITS_CHANGE),
+    /* CONST, not EMITS_CHANGE: it cannot move while the daemon is running, so
+     * a caller may read it once and cache it. */
+    SD_BUS_PROPERTY("InterfaceVersion", "u", prop_interface_version, 0, SD_BUS_VTABLE_PROPERTY_CONST),
     SD_BUS_PROPERTY("UpdateAvailable",  "b", prop_update_available,  0, SD_BUS_VTABLE_PROPERTY_EMITS_CHANGE),
     SD_BUS_PROPERTY("UpdateType",       "s", prop_update_type,       0, SD_BUS_VTABLE_PROPERTY_EMITS_CHANGE),
     SD_BUS_PROPERTY("UpdateVersion",    "s", prop_update_version,    0, SD_BUS_VTABLE_PROPERTY_EMITS_CHANGE),
