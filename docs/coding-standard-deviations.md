@@ -42,3 +42,7 @@ that the rest was never checked. Measured on the current tree:
   gate**: the contract lists them, and nothing checks the list against the
   code. That gap is named here rather than left for the next reader to
   discover.
+- **The native test suite builds and runs here** — 74 cases. An earlier note in this
+  project's documents claimed it could not, and named a missing `libarchive` as the cause.
+  That was a stale CMake cache holding `FUS_LIB_DIR`: the dependency is required only when
+  that is set, and the test target does not link the library at all.
