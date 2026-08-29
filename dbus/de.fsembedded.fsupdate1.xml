@@ -339,16 +339,20 @@
 
       Caller : CLI on SIGINT, ADU on workflow cancel.
 
-      Cooperative cancel. The worker polls m_cancel_requested at phase
-      boundaries (between fw and app stages, and before entering RAUC's
-      InstallBundle wait loop). When the cancel point is hit, the worker
-      pushes a Completion event with success=false, message="cancelled by
-      user" — clients see the standard InstallCompleted signal.
+      Records a cancel request. It does not interrupt anything: the worker
+      never reads the request, so the install runs to completion and its
+      writes complete. What the request changes is the reported outcome. When
+      the worker's completion drains, a cancelled session is reported as
+      InstallState "failed" and InstallCompleted(success=false) with message
+      "cancelled by user (best-effort)" — including when the install itself
+      succeeded, and the message replaces the worker's own failure text when
+      it did not. InstallProgress keeps whatever the worker reached, so
+      observers can still see how far it got.
 
-      If the worker is currently inside a phase that has no cancel hook
-      (e.g. mid-RAUC InstallBundle write), the request is accepted but
-      will only take effect at the next phase boundary. This is documented
-      as a best-effort cancel; for hard guarantees see the safety rules.
+      There is therefore no cancel point, and no phase boundary at which the
+      request takes effect. A successful CancelInstall must not be read as
+      having stopped the update. Interrupting a running install needs a
+      cancellation seam in the library, which does not exist today.
 
       Rejected with:
         org.freedesktop.DBus.Error.InvalidArgs — session_id != active session
@@ -633,6 +637,11 @@
       normal completion — for example a lib panic or a RAUC bus disconnect
       mid-install. Not emitted for errors already covered by
       InstallCompleted(success=false).
+
+      Not emitted today: no code path constructs the event this signal is
+      raised from, so no session has ever produced it. The signature is FIXED
+      per the stability statement above and the signal stays for that reason.
+      A subscriber must not use it as its only completion channel.
 
       Note: a service restart cannot emit this signal — the process is gone.
       Clients that reconnect after a restart must call GetState() to detect a

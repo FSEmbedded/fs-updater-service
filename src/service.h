@@ -132,8 +132,9 @@ public:
     std::mutex                m_pending_mtx;
     std::vector<PendingEvent> m_pending;
     std::thread               m_install_thread;
-    /* Set by CancelInstall handler (loop thread); read by worker thread
-     * at phase boundaries. Cooperative cancel — no preemption. */
+    /* Set by the CancelInstall handler and read on the loop thread when the
+     * worker's completion drains. The worker never reads it: the install runs
+     * to completion, and only the reported outcome changes. */
     std::atomic<bool>         m_cancel_requested{false};
 
     /* ── Worker-tuning knobs (env-driven, read once at construction) ──
