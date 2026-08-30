@@ -1,0 +1,8 @@
+# Cases this repository's gtest suite is expected to run.
+#
+# ctest registers the binary, not the cases, so this number is the only thing
+# that notices a case that stopped being compiled. scripts/check-case-count.sh
+# compares it against gtest's own summary, locally and in CI alike.
+#
+# Raise it in the same commit that adds cases.
+75
