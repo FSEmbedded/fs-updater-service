@@ -512,7 +512,10 @@
     <!-- true iff an update slot is queued and awaiting install or commit -->
     <property name="UpdateAvailable"  type="b" access="read"/>
 
-    <!-- "fw", "app", "fw+app", or "" when no update is queued -->
+    <!-- "fw", "app", "fw+app", or "". The empty string carries two situations,
+         not one: no update is queued, and a payload that is installed or
+         installing but carries no type descriptor. A plain RAUC bundle is the
+         second case, so a caller must not read "" as "nothing here". -->
     <property name="UpdateType"       type="s" access="read"/>
 
     <!-- version string from the ADU twin manifest; "" when no update is queued -->
