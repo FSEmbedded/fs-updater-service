@@ -518,10 +518,14 @@
          second case, so a caller must not read "" as "nothing here". -->
     <property name="UpdateType"       type="s" access="read"/>
 
-    <!-- version string from the ADU twin manifest; "" when no update is queued -->
+    <!-- Version string, from the cloud manifest on that path and from the
+         bundle's own descriptor on a local install. Empty in the same two
+         situations as UpdateType above: nothing queued, and a payload that
+         carries no descriptor to read one from. -->
     <property name="UpdateVersion"    type="s" access="read"/>
 
-    <!-- expected payload size in bytes; 0 when no update is queued -->
+    <!-- Expected payload size in bytes; 0 when nothing is queued, and also
+         when the source does not declare one. -->
     <property name="UpdateSize"       type="t" access="read"/>
 
     <!-- download phase state: "idle"|"in_progress"|"finished"|"failed" -->
