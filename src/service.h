@@ -57,6 +57,22 @@ public:
     virtual ~IUpdater() = default;
 
     virtual CheckUpdateInfo check_update_available() = 0;
+    /* Read-only durable query: does the durable update state owe a reboot?
+     * True while an installed update or a prepared rollback waits for the
+     * reboot that makes it take effect; false when the durable state waits
+     * on a commit instead, or holds nothing. This is the source the
+     * RebootPending property derives from -- the service holds no mirror
+     * of it, so there is no cached copy to go stale. */
+    virtual bool            reboot_pending() = 0;
+    /* Read-only durable query for the Rollback door: the update type the
+     * durable state names as the rollback dimension -- including the failed
+     * and taken-rollback states, where the library still has a rollback or
+     * commit path of its own to answer with. Empty when the durable state
+     * names none (idle, or uninterpretable): the bus Rollback carries no
+     * type argument, so with no durable dimension there is nothing the
+     * door can act on -- and the library's firmware rollback on an idle
+     * device is not a no-op, it switches to the other committed slot. */
+    virtual std::string     rollback_candidate_type() = 0;
     /* Inspect a local update bundle on disk and return its declared
      * type / version / size, without installing anything. Used by
      * InstallLocal to populate the UpdateType/Version/Size properties
@@ -109,10 +125,16 @@ public:
         std::string kind;          /* library exception kind; "" on success */
     };
 
-    /* ── State fields (read by property getters) ─────────────────────── */
+    /* ── State fields (read by property getters) ───────────────────────
+     * Session-scoped only. m_update_type / m_update_version / m_update_size
+     * are the running session's announced metadata (cloud manifest or
+     * inspect_bundle); the published UpdateType/Version/Size prefer them
+     * only while the session is in flight — see published_update_view().
+     * UpdateAvailable and RebootPending have no members at all: they are
+     * derived from the durable state on every read, so there is no cached
+     * copy that could diverge from the device. */
     uint32_t    m_session_id       = 0;
     uint32_t    m_session_counter  = 0;
-    bool        m_update_available = false;
     std::string m_update_type;
     std::string m_update_version;
     uint64_t    m_update_size      = 0;
@@ -124,9 +146,38 @@ public:
      * with explicit memory_order_acquire / memory_order_release gives a
      * torn-read-free property reader without taking m_state_mtx. */
     alignas(64) std::atomic<int32_t> m_install_progress{0};
-    bool        m_reboot_pending   = false;
 
     std::string m_payload_path;
+
+    /* ── Published update view (derived on read) ──────────────────────
+     * DISPLAY ONLY. The five affected property getters and
+     * method_get_state call this same helper, so the two read paths
+     * cannot drift apart — and nothing else may consult it: a value
+     * computed for display (in flight it reports the announced session
+     * as available) must never carry an authorization decision. The
+     * verbs ask the updater their own, narrower questions.
+     * UpdateAvailable / RebootPending come from the durable state
+     * (through IUpdater); UpdateType / Version / Size are the session's
+     * announced values while it is in flight and the durable answer
+     * otherwise. While the worker thread is inside the library, the
+     * helper does not enter it from the loop thread — the session
+     * answers instead (sd-bus and the library are single-threaded by
+     * contract). */
+    struct PublishedUpdateView {
+        bool        update_available = false;
+        std::string update_type;
+        std::string update_version;
+        uint64_t    update_size     = 0;
+        bool        reboot_pending  = false;
+    };
+    PublishedUpdateView published_update_view();
+
+    /* A session is in flight from its mint until it turns terminal: the
+     * install reached finished/failed, or the download failed with no
+     * install started. In flight, the session owns the published
+     * UpdateType/Version/Size (and an update is by definition announced);
+     * terminal, the durable state answers. */
+    bool session_in_flight() const;
 
     /* ── Thread communication ─────────────────────────────────────────── */
     std::mutex                m_pending_mtx;
@@ -176,6 +227,15 @@ private:
     friend class ServiceCtorRecoveryTest_ApplyWorksOnRecoveredPendingUpdate_Test;
 
     static int on_wakeup(sd_event_source* src, int fd, uint32_t revents, void* userdata);
+
+    /* True while the install worker thread may be inside the library. */
+    bool install_running() const;
+
+    /* Tear down the session view after a verb the library actually
+     * performed (apply / rollback / commit). Only session fields: the
+     * published update answers derive from the durable state the verb
+     * just moved. */
+    void reset_session_view();
 
     /* Spawn the install worker thread for the current session.
      * Pre: caller is on the loop thread, payload_path is non-empty,

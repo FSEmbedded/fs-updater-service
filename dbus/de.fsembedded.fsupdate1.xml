@@ -386,7 +386,14 @@
       No session_id: Apply reads durable lib state (U-Boot variables) that is
       independent of the in-memory session.
 
-      Rejected if InstallState is not "finished".
+      Rejected if InstallState is not "finished" — with one exception, and it
+      is narrow by design: when NO session exists at all (a service restart
+      lost it) and the durable state holds a pending update, Apply accepts,
+      because that pending update is this door's own finished install seen
+      across the restart. A session that exists but did not finish — a failed
+      install, a running or dead download — is always rejected: accepting
+      there would apply an unrelated durable update and report the caller's
+      failed session as applied.
 
       Out: reboot_required — true for firmware updates; false for app-only
     -->
@@ -399,9 +406,23 @@
 
       Caller : ADU handler Rollback() — CLI `rollback_update` is local-flow only and calls FSUpdate directly.
 
-      Initiates a rollback through FSUpdate. After rollback the service
-      resets to idle state. RebootPending may be set if the firmware rollback
-      path requires a reboot to finalise.
+      Initiates a rollback through FSUpdate. The update type handed to the
+      library is the dimension the DURABLE state names — never the session's
+      announced type, which may describe a payload that was never installed;
+      the library's firmware rollback on a device with nothing pending is
+      not a no-op, it switches the boot order to the other committed slot.
+      A pending update that survived a service restart is therefore still
+      rollback-able, and a taken rollback awaiting its commit is answered by
+      the library's own "commit required" rejection. When the durable state
+      names no dimension (idle, or uninterpretable), the call is refused
+      with Error.NothingToApply: this method carries no type argument, so
+      there is nothing the door could act on. The session view resets to
+      idle only when the library actually acted; a refused or failed
+      rollback leaves it untouched.
+
+      A taken rollback waits for the reboot that finalises it, so
+      RebootPending reads true afterwards (it derives from the durable
+      state; nothing fabricates a false).
 
       No session_id: operates on durable lib state.
 
@@ -509,24 +530,49 @@
     -->
     <property name="SessionId"        type="u" access="read"/>
 
-    <!-- true iff an update slot is queued and awaiting install or commit -->
-    <property name="UpdateAvailable"  type="b" access="read"/>
+    <!-- true iff an update is announced by the running session or pending
+         in the durable state (installed, awaiting apply/commit). Derived
+         on every read — never cached, so it cannot outlive the state it
+         reports: a payload the install rejected is not advertised, and an
+         update the local door committed stops being advertised without a
+         service restart.
 
-    <!-- "fw", "app", "fw+app", or "". The empty string carries two situations,
-         not one: no update is queued, and a payload that is installed or
-         installing but carries no type descriptor. A plain RAUC bundle is the
-         second case, so a caller must not read "" as "nothing here". -->
-    <property name="UpdateType"       type="s" access="read"/>
+         Like every derived property below, it announces changes as
+         invalidation, not with a value: the daemon signals at its own
+         transitions, but the local CLI door can move the durable state
+         with no signal at all — so a caller that needs freshness must
+         re-read (poll), never trust a cached value. -->
+    <property name="UpdateAvailable"  type="b" access="read">
+      <annotation name="org.freedesktop.DBus.Property.EmitsChangedSignal" value="invalidates"/>
+    </property>
 
-    <!-- Version string, from the cloud manifest on that path and from the
-         bundle's own descriptor on a local install. Empty in the same two
-         situations as UpdateType above: nothing queued, and a payload that
-         carries no descriptor to read one from. -->
-    <property name="UpdateVersion"    type="s" access="read"/>
+    <!-- "fw", "app", "fw+app", or "". While a session is in flight this is
+         the session's announced value (cloud manifest, or the bundle's own
+         descriptor on a local install), so subscribers see it during the
+         install; once the session is terminal it derives from the durable
+         state. The empty string carries two situations, not one: no update
+         is queued, and a payload that is installed or installing but
+         carries no type descriptor. A plain RAUC bundle is the second
+         case, so a caller must not read "" as "nothing here". -->
+    <property name="UpdateType"       type="s" access="read">
+      <annotation name="org.freedesktop.DBus.Property.EmitsChangedSignal" value="invalidates"/>
+    </property>
 
-    <!-- Expected payload size in bytes; 0 when nothing is queued, and also
-         when the source does not declare one. -->
-    <property name="UpdateSize"       type="t" access="read"/>
+    <!-- Version string; session-announced while in flight, derived from
+         the durable state otherwise, like UpdateType. Empty in the same
+         two situations as UpdateType above: nothing queued, and a payload
+         that carries no descriptor to read one from. -->
+    <property name="UpdateVersion"    type="s" access="read">
+      <annotation name="org.freedesktop.DBus.Property.EmitsChangedSignal" value="invalidates"/>
+    </property>
+
+    <!-- Expected payload size in bytes; session-announced while in flight.
+         0 when nothing is queued, and also when the source does not
+         declare one — the durable state declares no size, so the value
+         drops to 0 once the session is terminal. -->
+    <property name="UpdateSize"       type="t" access="read">
+      <annotation name="org.freedesktop.DBus.Property.EmitsChangedSignal" value="invalidates"/>
+    </property>
 
     <!-- download phase state: "idle"|"in_progress"|"finished"|"failed" -->
     <property name="DownloadState"    type="s" access="read"/>
@@ -547,10 +593,26 @@
     <property name="InstallProgress"  type="i" access="read"/>
 
     <!--
-      true from the point Apply() is called for a firmware update until the
-      system reboots. Always false for application-only updates.
+      true while the durable state owes a reboot: an installed update
+      (any type — the new app squashfs also takes effect only at the next
+      preinit pass) or a taken rollback waiting for the reboot that
+      finalises it. Derived from the durable state on every read, so it is
+      true as soon as the install completes — before Apply — and stays
+      true across a service restart; false once the reboot happened or the
+      pending state waits on a commit instead.
+
+      The raw durable flag alone cannot tell "installed, reboot owed" from
+      "rebooted, commit owed"; the answer uses the library's evidence
+      classification (booted slot against boot order), the same one the
+      CLI status verb reports from. When that evidence is indeterminate or
+      unreadable, this reads false: the property affirms an owed reboot
+      only on evidence — a caller must not reboot-loop on a device whose
+      state cannot be read. The CLI status verb reports the indeterminate
+      shape distinctly.
     -->
-    <property name="RebootPending"    type="b" access="read"/>
+    <property name="RebootPending"    type="b" access="read">
+      <annotation name="org.freedesktop.DBus.Property.EmitsChangedSignal" value="invalidates"/>
+    </property>
 
     <!-- ═══════════════════════════════════════════════════════════════
          Signals

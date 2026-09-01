@@ -5,4 +5,4 @@
 # compares it against gtest's own summary, locally and in CI alike.
 #
 # Raise it in the same commit that adds cases.
-75
+88

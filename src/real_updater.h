@@ -15,6 +15,8 @@ public:
     ~RealUpdater() override = default;
 
     CheckUpdateInfo check_update_available() override;
+    bool            reboot_pending() override;
+    std::string     rollback_candidate_type() override;
     CheckUpdateInfo inspect_bundle(const std::string& path) override;
     void            update_image(std::string type, std::string path) override;
     bool            apply_pending_update(const std::string& type) override;
