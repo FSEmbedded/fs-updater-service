@@ -61,6 +61,13 @@
       arrived as `org.freedesktop.DBus.Error.Failed` with `-EIO`, which is
       still what an unmapped category answers, so nothing a caller relied on
       moved.
+    - Five properties — `UpdateAvailable`, `UpdateType`, `UpdateVersion`,
+      `UpdateSize`, `RebootPending` — switched at InterfaceVersion 5 from
+      `EmitsChangedSignal=true` to `=invalidates`: a `PropertiesChanged`
+      signal no longer carries the new value, only notice that one must be
+      re-`Get`. A generated proxy that read the old default and populated
+      its cache straight from the signal payload now gets nothing there and
+      must call `Get`/`GetAll` instead.
 
   A device whose bus surface predates all of this has no `InterfaceVersion`
   property at all; a failed read of it is itself the answer.
