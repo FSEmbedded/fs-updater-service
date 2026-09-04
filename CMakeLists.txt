@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.16)
-project(fs-updater-service VERSION 2.2.8 LANGUAGES CXX)
+project(fs-updater-service VERSION 2.2.9 LANGUAGES CXX)
 
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
@@ -96,9 +96,15 @@ install(FILES
     DESTINATION ${CMAKE_INSTALL_DATAROOTDIR}/dbus-1/system-services
 )
 
+# The bus policy IS the authorization decision for this service (see the file's
+# own note), so it must not be shadowable. On the A/B images this ships to, /etc
+# is a writable overlay whose upper outlives the image and is independent of the
+# slot: a copy made there once beats every later version, and a stale permissive
+# copy would silently reopen the door. The vendor location travels with the
+# image and leaves /etc free for a deliberate administrator override.
 install(FILES
     data/de.fsembedded.fsupdate1.conf
-    DESTINATION ${CMAKE_INSTALL_SYSCONFDIR}/dbus-1/system.d
+    DESTINATION ${CMAKE_INSTALL_DATAROOTDIR}/dbus-1/system.d
 )
 
 install(FILES
