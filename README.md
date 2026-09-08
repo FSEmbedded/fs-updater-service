@@ -30,7 +30,7 @@ vtable in `src/service.cpp`. Read it before writing a client; nothing here resta
 ```
 
 `--lib <build_dir>` points to a local `fs-updater-lib` build instead of the installed SDK library.
-Pass the lib build that matches the mode — `build_san/` for `sanitize`, `build/` otherwise: the
+Pass the lib build that matches the mode — the lib's `build_san/` for `sanitize`, its `build/` otherwise: the
 staged archive carries its own flags, so a sanitized lib in a plain binary fails to link, and a
 plain lib in a sanitized binary leaves the library half of the code uninstrumented.
 `build.sh` prints its full target and flag list itself; it has no `--help`, so an unknown option is

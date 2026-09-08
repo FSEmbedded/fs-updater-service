@@ -20,8 +20,8 @@ Targets:
 
 Options:
   --lib <build_dir>  Use locally built fs-updater-lib from this build directory.
-                     Match the mode: build_san/ for the sanitize target, build/
-                     for the others — the lib archive carries its own flags.
+                     Match the mode: the lib's build_san/ for the sanitize target,
+                     its build/ for the others — the lib archive carries its own flags.
   --sanitize         With 'test': run the native suite under ASan/UBSan
                      (separate build-test-san/ dir; cross builds keep the
                      'sanitize' target).
@@ -30,6 +30,10 @@ EOF
 }
 
 TARGET=""
+# Both suffixes pick the build directory; an exported one from the caller
+# would silently redirect a plain build.
+CROSS_SUFFIX=""
+TEST_SUFFIX=""
 LIB_BUILD_DIR=""
 EXTRA_ARGS=()
 
