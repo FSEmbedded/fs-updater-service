@@ -135,7 +135,10 @@ test)
     mkdir -p "$build_dir" && cd "$build_dir"
     "$cmake_bin" "${cmake_args[@]}" "$PROJECT_ROOT"
     make -j"$(nproc)"
-    "$ctest_bin" --output-on-failure
+    # --output-junit needs a real ctest; the fallback above is a cmake --build call.
+    junit=()
+    case "$ctest_bin" in *ctest) junit=(--output-junit "$build_dir/ctest-junit.xml") ;; esac
+    "$ctest_bin" --output-on-failure "${junit[@]}"
     ;;
 clean)
     rm -rf "$PROJECT_ROOT/build" "$PROJECT_ROOT/build-san" "$PROJECT_ROOT/build-test" "$PROJECT_ROOT/build-test-san"
