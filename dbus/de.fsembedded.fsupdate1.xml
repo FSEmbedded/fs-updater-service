@@ -69,6 +69,13 @@
       its cache straight from the signal payload now gets nothing there and
       must call `Get`/`GetAll` instead.
 
+    - `InterfaceVersion` carries an explicit `EmitsChangedSignal=const`
+      annotation. The daemon has always exported it as a
+      constant, and the prose above always said so; only the machine-readable
+      form was missing, so a generated proxy read the specification default
+      and waited for a `PropertiesChanged` that never came. Nothing a caller
+      relied on moved, and the version number did not either.
+
   A device whose bus surface predates all of this has no `InterfaceVersion`
   property at all; a failed read of it is itself the answer.
 
@@ -527,7 +534,9 @@
       What moves it, and what does not — see "Interface version and stability"
       below.
     -->
-    <property name="InterfaceVersion" type="u" access="read"/>
+    <property name="InterfaceVersion" type="u" access="read">
+      <annotation name="org.freedesktop.DBus.Property.EmitsChangedSignal" value="const"/>
+    </property>
 
     <!--
       Current session generation counter. 0 = no active session.
