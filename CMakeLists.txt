@@ -173,8 +173,10 @@ if(BUILD_TESTING)
     # destabilises the connection enough to fault during process exit
     # (tests themselves all pass), and the warning spams CI output.
     # Tests that need to exercise the knob explicitly setenv() it back.
+    # GTEST_OUTPUT gives per-case XML: ctest registers the binary, not the
+    # cases, so its own JUnit report has a single entry for all of them.
     set_tests_properties(fs-updater-service-tests PROPERTIES
-        ENVIRONMENT "FSUPDATE_INHIBIT_SLEEP=0")
+        ENVIRONMENT "FSUPDATE_INHIBIT_SLEEP=0;GTEST_OUTPUT=xml:${CMAKE_BINARY_DIR}/gtest-fs-updater-service-tests.xml")
 
     # The published interface is documentation nothing parses at runtime, so a
     # method can be exported for years without ever appearing in it. Compare
