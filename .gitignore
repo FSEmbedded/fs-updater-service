@@ -1,4 +1,5 @@
 build/
+build-san/
 build-native/
 build-test/
 build-test-san/

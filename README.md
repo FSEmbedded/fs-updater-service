@@ -23,21 +23,23 @@ vtable in `src/service.cpp`. Read it before writing a client; nothing here resta
 ```bash
 ./scripts/build.sh debug [--lib <build_dir>]   # cross-compile Debug
 ./scripts/build.sh release                      # cross-compile Release
-./scripts/build.sh sanitize                     # cross-compile Debug, see the caveat below
+./scripts/build.sh sanitize                     # cross-compile Debug with ASan + UBSan, into build-san/
 ./scripts/build.sh test                         # native build + unit tests (ctest)
 ./scripts/build.sh test --sanitize              # the same suites under ASan/UBSan
 ./scripts/build.sh clean
 ```
 
 `--lib <build_dir>` points to a local `fs-updater-lib` build instead of the installed SDK library.
+Pass the lib build that matches the mode — `build_san/` for `sanitize`, `build/` otherwise: the
+staged archive carries its own flags, so a sanitized lib in a plain binary fails to link, and a
+plain lib in a sanitized binary leaves the library half of the code uninstrumented.
 `build.sh` prints its full target and flag list itself; it has no `--help`, so an unknown option is
 what produces the usage text (exit 1). It auto-detects a vendored `vendor/libsystemd-dev` when the
 host has no libsystemd of its own.
 
-**The cross `sanitize` target currently carries no sanitizer**. It passes the
-flags through `CMAKE_CXX_FLAGS`, and the SDK toolchain file overwrites that cache entry with
-`FORCE`, so they never reach the compiler. Use `test --sanitize`, which goes through
-`ENABLE_SANITIZERS`, until the target is rerouted.
+The cross `sanitize` target and the native `test --sanitize` both route through the
+`ENABLE_SANITIZERS` option. Passing sanitizer flags via `CMAKE_CXX_FLAGS` instead does nothing on a
+cross build: the SDK toolchain file overwrites that cache entry with `FORCE`.
 
 **Run the suite with `FSUP_REQUIRE_BUS=1`.** Without it a run with no session bus reachable skips
 the bus-facing cases and still reports success — the variable turns that into a failure, which is

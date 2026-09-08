@@ -8,7 +8,7 @@ set(CMAKE_CXX_EXTENSIONS OFF)
 include(GNUInstallDirs)
 
 option(BUILD_TESTING "Build unit tests" OFF)
-option(ENABLE_SANITIZERS "Enable ASan and UBSan (native test builds)" OFF)
+option(ENABLE_SANITIZERS "Enable ASan and UBSan (Debug builds)" OFF)
 option(FSUP_WERROR "Treat compiler warnings as errors (-Werror)" ON)
 
 # Global so the test binaries (and fetched gtest) share the sanitizer runtime.
