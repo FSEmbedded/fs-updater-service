@@ -172,10 +172,24 @@ std::string RealUpdater::rollback_candidate_type()
     /* All enumerators spelled, no default -- same reasoning as in
      * reboot_pending(). The taken-rollback states still name their
      * dimension: the library answers a rollback there with its own
-     * "commit required" rejection, which is the honest reply. */
+     * "commit required" rejection, which is the honest reply. The two
+     * incomplete-update states are split out from their neighbours: a
+     * firmware digit still in flight for a slot BOOT_ORDER does not
+     * prefer never reached the boot order, so pending_update_actionable()
+     * -- the same evidence check check_update_available() already uses --
+     * answers "" (nothing to roll back) instead of naming a dimension that
+     * was never staged. Unreadable evidence must not make a real pending
+     * rollback disappear, so a caught exception falls through unchanged. */
     return translated([&]() -> std::string {
         switch (m_fsu->get_update_reboot_state()) {
         case Flags::INCOMPLETE_FW_UPDATE:
+            try {
+                if (!m_fsu->pending_update_actionable()) {
+                    return "";
+                }
+            } catch (const std::exception&) {
+            }
+            return "fw";
         case Flags::FAILED_FW_UPDATE:
         case Flags::FW_UPDATE_REBOOT_FAILED:
         case Flags::ROLLBACK_FW_REBOOT_PENDING:
@@ -187,6 +201,13 @@ std::string RealUpdater::rollback_candidate_type()
         case Flags::INCOMPLETE_APP_ROLLBACK:
             return "app";
         case Flags::INCOMPLETE_APP_FW_UPDATE:
+            try {
+                if (!m_fsu->pending_update_actionable()) {
+                    return "";
+                }
+            } catch (const std::exception&) {
+            }
+            return "fw+app";
         case Flags::ROLLBACK_APP_FW_REBOOT_PENDING:
         case Flags::INCOMPLETE_APP_FW_ROLLBACK:
             return "fw+app";

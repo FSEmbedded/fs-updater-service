@@ -435,7 +435,13 @@
       the library's own "commit required" rejection. When the durable state
       names no dimension (idle, or uninterpretable), the call is refused
       with Error.NothingToApply: this method carries no type argument, so
-      there is nothing the door could act on. The session view resets to
+      there is nothing the door could act on. The same refusal also
+      fires when the raw state still names a firmware-bearing dimension but
+      pending_update_actionable() — the same evidence check
+      CheckUpdateAvailable uses — answers a definite false: an install that
+      never reached the boot order. Evidence the device cannot read does
+      not refuse; the call still proceeds on that dimension rather than
+      silently dropping a real pending rollback. The session view resets to
       idle only when the library actually acted; a refused or failed
       rollback leaves it untouched.
 
