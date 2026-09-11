@@ -42,6 +42,20 @@ auto translated(F&& fn) -> decltype(fn())
     }
 }
 
+/* Shared by check_update_available() and rollback_candidate_type(): both
+ * suppress an incomplete-update answer only on a definite false from this
+ * evidence check, and both must fail open (true) on a caught exception --
+ * evidence the device cannot read must not make a real pending update or
+ * rollback disappear. */
+bool pending_update_actionable_or_unknown(fs::FSUpdate& fsu)
+{
+    try {
+        return fsu.pending_update_actionable();
+    } catch (const std::exception&) {
+        return true;
+    }
+}
+
 } // namespace
 
 RealUpdater::RealUpdater()
@@ -64,14 +78,9 @@ CheckUpdateInfo RealUpdater::check_update_available()
         {
             /* The raw flag alone would offer an install that never reached the
              * boot order as one the caller can commit. The library separates
-             * the two from evidence; a state it rules out is not available.
-             * Evidence the device cannot read must not make a real pending
-             * update disappear, so only a definite refusal suppresses it. */
-            try {
-                if (!m_fsu->pending_update_actionable()) {
-                    return CheckUpdateInfo{false, "", "", 0};
-                }
-            } catch (const std::exception&) {
+             * the two from evidence; a state it rules out is not available. */
+            if (!pending_update_actionable_or_unknown(*m_fsu)) {
+                return CheckUpdateInfo{false, "", "", 0};
             }
 
             std::string type;
@@ -183,11 +192,8 @@ std::string RealUpdater::rollback_candidate_type()
     return translated([&]() -> std::string {
         switch (m_fsu->get_update_reboot_state()) {
         case Flags::INCOMPLETE_FW_UPDATE:
-            try {
-                if (!m_fsu->pending_update_actionable()) {
-                    return "";
-                }
-            } catch (const std::exception&) {
+            if (!pending_update_actionable_or_unknown(*m_fsu)) {
+                return "";
             }
             return "fw";
         case Flags::FAILED_FW_UPDATE:
@@ -201,11 +207,8 @@ std::string RealUpdater::rollback_candidate_type()
         case Flags::INCOMPLETE_APP_ROLLBACK:
             return "app";
         case Flags::INCOMPLETE_APP_FW_UPDATE:
-            try {
-                if (!m_fsu->pending_update_actionable()) {
-                    return "";
-                }
-            } catch (const std::exception&) {
+            if (!pending_update_actionable_or_unknown(*m_fsu)) {
+                return "";
             }
             return "fw+app";
         case Flags::ROLLBACK_APP_FW_REBOOT_PENDING:
