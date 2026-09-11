@@ -207,8 +207,13 @@
       Caller : CLI `is_update_available`
 
       Queries the lib state machine to determine whether an update is pending
-      (downloaded but not yet committed). Maps to the lib's getUpdateRebootState()
-      returning one of the INCOMPLETE_* values.
+      (downloaded but not yet committed). One of the lib's INCOMPLETE_* states is
+      necessary but not sufficient: a state the lib's pending_update_actionable()
+      rules out — an install whose target slot never reached the boot order —
+      answers available=false. Rollback is refused either way; for a
+      firmware-only install, commit is still the correct exit (it quarantines
+      the stalled slot) — only a combined application+firmware install has
+      neither remedy here.
 
       Out: available — true if an update is pending and uncommitted
            type      — "fw", "app", or "fw+app"; "" when available=false

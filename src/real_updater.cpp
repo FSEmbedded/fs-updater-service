@@ -62,6 +62,18 @@ CheckUpdateInfo RealUpdater::check_update_available()
             state == Flags::INCOMPLETE_APP_UPDATE ||
             state == Flags::INCOMPLETE_APP_FW_UPDATE)
         {
+            /* The raw flag alone would offer an install that never reached the
+             * boot order as one the caller can commit. The library separates
+             * the two from evidence; a state it rules out is not available.
+             * Evidence the device cannot read must not make a real pending
+             * update disappear, so only a definite refusal suppresses it. */
+            try {
+                if (!m_fsu->pending_update_actionable()) {
+                    return CheckUpdateInfo{false, "", "", 0};
+                }
+            } catch (const std::exception&) {
+            }
+
             std::string type;
             std::string version;
 

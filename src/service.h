@@ -56,6 +56,14 @@ class IUpdater {
 public:
     virtual ~IUpdater() = default;
 
+    /* Read-only durable query: is there a pending update the caller can
+     * still act on, and of which type? True only while the durable state
+     * names an incomplete update AND the library's own evidence agrees it
+     * can be finished -- a firmware install whose target slot never reached
+     * the boot order is durable but not actionable, and reporting it would
+     * invite a commit of an install that wrote nothing. The version is
+     * decoration: unreadable, it comes back empty rather than hiding the
+     * update. */
     virtual CheckUpdateInfo check_update_available() = 0;
     /* Read-only durable query: does the durable update state owe a reboot?
      * True while an installed update or a prepared rollback waits for the
