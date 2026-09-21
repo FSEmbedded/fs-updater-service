@@ -60,7 +60,7 @@ static constexpr uint32_t FSUPDATE_INTERFACE_VERSION = 5;
 /* Distinct D-Bus error name for "a conflicting operation is already in
  * flight". Every busy rejection uses this name + -EBUSY so the client can
  * tell busy apart from bad arguments (-EINVAL) or a missing updater
- * (-ENOSYS), instead of the old per-method mix (FAILED/LIMITS_EXCEEDED). */
+ * (-ENOSYS). */
 static constexpr const char* ERROR_BUSY = "de.fsembedded.fsupdate1.Error.Busy";
 
 /* Distinct D-Bus error name for "the updater backend is unavailable",
@@ -114,7 +114,7 @@ static const char* error_name_for(const std::string& kind)
  * Guarded on > 0 rather than != 0: UpdaterError takes an unchecked int and the
  * interface exists to be driven by a double, so a negative value would negate
  * into a positive return and read as success. Where no errno was carried, -EIO
- * stands as before. */
+ * is returned. */
 static int reject_updater(sd_bus_error* e, const UpdaterError& err)
 {
     sd_bus_error_set(e, error_name_for(err.kind), err.what());
@@ -152,22 +152,12 @@ Service::Service(sd_bus* bus, sd_event* event, std::unique_ptr<IUpdater> updater
     m_inhibit_sleep        = read_env_int_or("FSUPDATE_INHIBIT_SLEEP", 1,
                                               /*lo=*/0,  /*hi=*/1);
 
-    /* One field is reconstructed at startup, and only one. The published
-     * update answers (UpdateAvailable, UpdateType/Version/Size,
-     * RebootPending) derive from the durable state on every read, so they
-     * need no snapshot here and cannot go stale against the local door.
-     * InstallState is different: it is session-local with no durable
-     * counterpart, and its live consumer is a poll loop — the cloud
-     * handler polls it between install and apply, and after a restart in
-     * that window "idle" would read there as a failed install. The durable
-     * state proves an install completed, so that one terminal fact is
-     * restored; SessionId, the type/version/size mirrors and DownloadState
-     * stay at their defaults (the session token and payload path were
-     * process-local and are gone).
-     *
-     * Defensive: m_updater may be null (vtable-level test path) and the
-     * query may throw if the durable state is wedged; either way the
-     * service starts with the defaults rather than refusing to start. */
+    /* Only InstallState is reconstructed at startup: it is session-local
+     * and a poll loop reads it between install and apply, so "idle" after a
+     * restart would read as a failed install. The durable state proves a
+     * completed install; everything else stays at its defaults.
+     * Defensive: m_updater may be null and the query may throw; the service
+     * then starts with the defaults. */
     if (m_updater != nullptr) {
         try {
             if (m_updater->check_update_available().available) {
@@ -282,7 +272,7 @@ Service::PublishedUpdateView Service::published_update_view()
     return view;
 }
 
-/* ── Wakeup handler (drain eventfd; filled by install thread in 2c) ─────── */
+/* ── Wakeup handler (drains the eventfd the install thread signals) ─────── */
 
 int Service::on_wakeup(sd_event_source* /*src*/, int fd, uint32_t /*revents*/, void* userdata)
 {
@@ -582,9 +572,7 @@ void Service::spawn_install_worker(const std::string& update_type,
      *
      * Throttle: emit on value change AND when at least
      * m_progress_throttle_ms have elapsed since the last emission.
-     * 100 % always emits so the bar reaches the end. 0 ms disables.
-     * Cuts dbus-daemon load on single-core targets where RAUC ticks
-     * faster than humans/UIs care to see. */
+     * 100 % always emits so the bar reaches the end. 0 ms disables. */
     Service* svc = this;
     using clock = std::chrono::steady_clock;
     /* Seed last_t to "throttle_window + 1ms in the past" so the very
@@ -781,9 +769,8 @@ int Service::method_install_local(sd_bus_message* msg, void* userdata, sd_bus_er
 
     /* Introspect the bundle to populate UpdateType/Version/Size so
      * D-Bus subscribers see meaningful values during the install
-     * rather than empty strings. Implementations that don't yet
-     * support introspection (current RealUpdater) return
-     * available=false or empty type — we still proceed and the
+     * rather than empty strings. Implementations without
+     * introspection return available=false or empty type — we still proceed and the
      * worker passes whatever type we got into update_image(), where
      * the lib determines the real type from the container header. */
     CheckUpdateInfo info;
@@ -805,7 +792,6 @@ int Service::method_install_local(sd_bus_message* msg, void* userdata, sd_bus_er
         ++svc->m_session_counter;
     svc->m_session_id = svc->m_session_counter;
 
-    /* Stamp the session record. */
     svc->m_update_type       = info.type;
     svc->m_update_version    = info.version;
     svc->m_update_size       = info.size;
@@ -818,10 +804,6 @@ int Service::method_install_local(sd_bus_message* msg, void* userdata, sd_bus_er
         "UpdateSize", "DownloadState", "DownloadProgress",
         "RebootPending", nullptr);
 
-    /* spawn_install_worker transitions InstallState to "in_progress",
-     * resets m_install_progress + m_cancel_requested, emits the
-     * InstallState/InstallProgress PropertiesChanged, wires the
-     * progress callback, and starts the worker thread. */
     svc->spawn_install_worker(svc->m_update_type, svc->m_payload_path);
 
     return sd_bus_reply_method_return(msg, "u", svc->m_session_id);
@@ -882,20 +864,14 @@ int Service::method_apply(sd_bus_message* msg, void* userdata, sd_bus_error* ret
     if (svc->install_running())
         return reject_busy(ret_err, "install in progress");
 
-    /* Apply's own authorization — deliberately NOT the published view,
-     * which is computed for display and may call an announced download
-     * "available". The question here is narrower: is there an applicable
-     * install, and does it belong to this door? Two shapes qualify:
+    /* Apply's own authorization, never the published view. Two shapes
+     * qualify:
      *  - this session finished its install ("finished" is terminal and
      *    only an install sets it), or
-     *  - no session exists at all and the durable state holds a pending
-     *    update (a restart where the ctor's recovery could not run).
-     * A session that exists but did not finish — failed install, live or
-     * dead download — is refused: deriving a type there would bridge the
-     * caller's failed session onto an unrelated durable update and report
-     * it as applied.
-     * The type argument is informational (the library reads the durable
-     * state itself); a reconstructed restart passes it empty. */
+     *  - no session exists and the durable state holds a pending update.
+     * Any other session is refused: deriving a type there would bridge a
+     * failed session onto an unrelated durable update.
+     * The type argument is informational; a restart passes it empty. */
     std::string apply_type = svc->m_update_type;
     if (svc->m_install_state != "finished") {
         if (svc->m_session_id != 0 || svc->m_install_state != "idle") {
@@ -963,8 +939,7 @@ int Service::method_rollback(sd_bus_message* msg, void* userdata, sd_bus_error* 
      * When the durable state names no dimension, refuse: the bus call
      * carries no type argument, so there is nothing the door could act
      * on, and the library called with an empty type does nothing and
-     * throws nothing — the old success reply asserted a rollback that
-     * never happened. */
+     * throws nothing. */
     std::string rollback_type;
     try {
         rollback_type = svc->m_updater->rollback_candidate_type();
@@ -990,10 +965,6 @@ int Service::method_rollback(sd_bus_message* msg, void* userdata, sd_bus_error* 
         return -EIO;
     }
 
-    /* Reached only when the library actually acted (a throw returned
-     * above): tear down the session view. RebootPending / UpdateAvailable
-     * are not touched — they derive from the durable state the rollback
-     * just moved, and a taken rollback still waits for its reboot. */
     svc->reset_session_view();
 
     sd_bus_emit_properties_changed(svc->m_bus, OBJ_PATH, INTERFACE,
@@ -1064,7 +1035,6 @@ int Service::method_get_state(sd_bus_message* msg, void* userdata, sd_bus_error*
 
     sd_bus_message_open_container(reply, 'a', "{sv}");
 
-    /* SessionId — u */
     sd_bus_message_open_container(reply, 'e', "sv");
     sd_bus_message_append_basic(reply, 's', "SessionId");
     sd_bus_message_open_container(reply, 'v', "u");
@@ -1072,7 +1042,6 @@ int Service::method_get_state(sd_bus_message* msg, void* userdata, sd_bus_error*
     sd_bus_message_close_container(reply);
     sd_bus_message_close_container(reply);
 
-    /* UpdateAvailable — b */
     {
         int v = static_cast<int>(view.update_available);
         sd_bus_message_open_container(reply, 'e', "sv");
@@ -1083,7 +1052,6 @@ int Service::method_get_state(sd_bus_message* msg, void* userdata, sd_bus_error*
         sd_bus_message_close_container(reply);
     }
 
-    /* UpdateType — s */
     sd_bus_message_open_container(reply, 'e', "sv");
     sd_bus_message_append_basic(reply, 's', "UpdateType");
     sd_bus_message_open_container(reply, 'v', "s");
@@ -1091,7 +1059,6 @@ int Service::method_get_state(sd_bus_message* msg, void* userdata, sd_bus_error*
     sd_bus_message_close_container(reply);
     sd_bus_message_close_container(reply);
 
-    /* UpdateVersion — s */
     sd_bus_message_open_container(reply, 'e', "sv");
     sd_bus_message_append_basic(reply, 's', "UpdateVersion");
     sd_bus_message_open_container(reply, 'v', "s");
@@ -1099,7 +1066,6 @@ int Service::method_get_state(sd_bus_message* msg, void* userdata, sd_bus_error*
     sd_bus_message_close_container(reply);
     sd_bus_message_close_container(reply);
 
-    /* UpdateSize — t */
     sd_bus_message_open_container(reply, 'e', "sv");
     sd_bus_message_append_basic(reply, 's', "UpdateSize");
     sd_bus_message_open_container(reply, 'v', "t");
@@ -1107,7 +1073,6 @@ int Service::method_get_state(sd_bus_message* msg, void* userdata, sd_bus_error*
     sd_bus_message_close_container(reply);
     sd_bus_message_close_container(reply);
 
-    /* DownloadState — s */
     sd_bus_message_open_container(reply, 'e', "sv");
     sd_bus_message_append_basic(reply, 's', "DownloadState");
     sd_bus_message_open_container(reply, 'v', "s");
@@ -1115,7 +1080,6 @@ int Service::method_get_state(sd_bus_message* msg, void* userdata, sd_bus_error*
     sd_bus_message_close_container(reply);
     sd_bus_message_close_container(reply);
 
-    /* DownloadProgress — i */
     sd_bus_message_open_container(reply, 'e', "sv");
     sd_bus_message_append_basic(reply, 's', "DownloadProgress");
     sd_bus_message_open_container(reply, 'v', "i");
@@ -1123,7 +1087,6 @@ int Service::method_get_state(sd_bus_message* msg, void* userdata, sd_bus_error*
     sd_bus_message_close_container(reply);
     sd_bus_message_close_container(reply);
 
-    /* InstallState — s */
     sd_bus_message_open_container(reply, 'e', "sv");
     sd_bus_message_append_basic(reply, 's', "InstallState");
     sd_bus_message_open_container(reply, 'v', "s");
@@ -1146,7 +1109,6 @@ int Service::method_get_state(sd_bus_message* msg, void* userdata, sd_bus_error*
         sd_bus_message_close_container(reply);
     }
 
-    /* RebootPending — b */
     {
         int v = static_cast<int>(view.reboot_pending);
         sd_bus_message_open_container(reply, 'e', "sv");

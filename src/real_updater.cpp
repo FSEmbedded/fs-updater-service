@@ -11,19 +11,12 @@ namespace {
  *
  * The category is the library's own -- append-only, ABI-stable, covered by its
  * tests, and RTTI-free because it dispatches by re-raising inside a catch
- * block rather than asking typeid (dynamic_cast is banned here). Writing a
- * second ladder is what this avoids; one already drifted in two tokens before
- * it was replaced by this.
+ * block rather than asking typeid (dynamic_cast is banned here).
  *
  * An UpdaterError passes through untouched: it is already translated, and
  * classifying it again would report every such failure as "system".
  */
-/* The classification itself does not depend on the wrapped call's type, so it
- * lives in a plain function: the template below is instantiated once per call
- * site, and only the try/catch shell is duplicated with it. The coding
- * standard asks for exactly this split -- factor non-type-dependent logic into
- * non-template functions -- because template instantiations are binary size on
- * a device that has to fit. */
+/* Classification is non-template so the template instantiations stay small. */
 [[noreturn]] void rethrow_as_updater_error(const std::exception& e)
 {
     const fs::ErrorInfo info = fs::classify_active_exception();
@@ -128,15 +121,9 @@ bool RealUpdater::reboot_pending()
         case Flags::INCOMPLETE_FW_UPDATE:
         case Flags::INCOMPLETE_APP_UPDATE:
         case Flags::INCOMPLETE_APP_FW_UPDATE:
-            /* The raw flag cannot separate "installed, reboot outstanding"
-             * from "rebooted, commit outstanding": both persist the same
-             * value. The library separates them from evidence (booted slot
-             * against boot order); use its classification -- the same one
-             * the status verb reports from -- rather than a second
-             * translation of the raw value. Indeterminate or unreadable
-             * evidence reads false: this property affirms an owed reboot
-             * only on evidence, and the status verb reports the
-             * indeterminate shape distinctly. */
+            /* The raw flag cannot separate "reboot outstanding" from
+             * "commit outstanding"; use the library's classification.
+             * Unreadable or indeterminate evidence reads false. */
             try {
                 return m_fsu->is_reboot_complete(state != Flags::INCOMPLETE_APP_UPDATE)
                        == fs::RebootCompleteState::PENDING;
@@ -178,17 +165,10 @@ std::string RealUpdater::rollback_candidate_type()
 {
     using Flags = update_definitions::UBootBootstateFlags;
 
-    /* All enumerators spelled, no default -- same reasoning as in
-     * reboot_pending(). The taken-rollback states still name their
-     * dimension: the library answers a rollback there with its own
-     * "commit required" rejection, which is the honest reply. The two
-     * incomplete-update states are split out from their neighbours: a
-     * firmware digit still in flight for a slot BOOT_ORDER does not
-     * prefer never reached the boot order, so pending_update_actionable()
-     * -- the same evidence check check_update_available() already uses --
-     * answers "" (nothing to roll back) instead of naming a dimension that
-     * was never staged. Unreadable evidence must not make a real pending
-     * rollback disappear, so a caught exception falls through unchanged. */
+    /* No default, so -Wswitch flags new enumerators. Taken-rollback states
+     * still name their dimension; the incomplete-update states answer ""
+     * unless pending_update_actionable() confirms the update was staged.
+     * Unreadable evidence falls through unchanged. */
     return translated([&]() -> std::string {
         switch (m_fsu->get_update_reboot_state()) {
         case Flags::INCOMPLETE_FW_UPDATE:

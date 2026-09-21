@@ -169,9 +169,8 @@ if(BUILD_TESTING)
 
     add_test(NAME fs-updater-service-tests COMMAND fs-updater-service-tests)
     # Disable the logind sleep-inhibit during unit tests: there is no
-    # logind on the test bus, the failure path through sd_bus_call_method
-    # destabilises the connection enough to fault during process exit
-    # (tests themselves all pass), and the warning spams CI output.
+    # logind on the test bus; the failing inhibit call would fault the
+    # process at exit.
     # Tests that need to exercise the knob explicitly setenv() it back.
     # GTEST_OUTPUT gives per-case XML: ctest registers the binary, not the
     # cases, so its own JUnit report has a single entry for all of them.

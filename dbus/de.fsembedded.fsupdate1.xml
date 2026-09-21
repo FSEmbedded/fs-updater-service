@@ -302,7 +302,7 @@
     <!--
       StartInstall
 
-      Caller : CLI `install_update` (replaces the installUpdate marker file).
+      Caller : CLI `install_update`.
 
       The service looks up the payload path recorded by FinishDownload and
       calls FSUpdate::update_image() asynchronously. Returns as soon as the
@@ -386,7 +386,7 @@
     <!--
       Apply
 
-      Caller : CLI `apply_update` cloud-mode (replaces the applyUpdate marker file).
+      Caller : CLI `apply_update` cloud-mode.
 
       Apply does NOT commit and does NOT resolve any INCOMPLETE_* state; it
       writes nothing at all. The install already put the target slot at the

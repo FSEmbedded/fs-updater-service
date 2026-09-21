@@ -30,9 +30,8 @@ User=root
 # /etc/systemd/system/fs-updater.service.d/board.conf.
 #
 #   Nice=5             keeps property reads responsive while the
-#                      worker drives RAUC; the worker itself drops
-#                      further (FSUPDATE_WORKER_NICE) once the env
-#                      knobs land.
+#                      worker drives RAUC; the worker drops
+#                      further via FSUPDATE_WORKER_NICE.
 #   CPUWeight=50       moderate share; system services stay snappy.
 #   IOSchedulingClass=best-effort + Prio=7  RAUC/eMMC writes don't
 #                      starve other consumers.
@@ -52,15 +51,8 @@ MemoryHigh=128M
 MemoryMax=256M
 LimitNOFILE=4096
 
-# Worker-tuning knobs read at service construction. See service.h
-# for rationale; override per-board via the drop-in file above.
-#   FSUPDATE_PROGRESS_MS   min ms between InstallProgress emissions
-#                          (0 disables; 100 % always fires)
-#   FSUPDATE_WORKER_NICE   nice() applied on worker thread entry
-#   FSUPDATE_WORKER_IOPRIO best-effort I/O priority 0..7
-#   FSUPDATE_INHIBIT_SLEEP non-zero takes a logind Inhibit fd for
-#                          shutdown:sleep:idle while install runs;
-#                          0 disables (use on systems without logind)
+# Worker-tuning knobs (FSUPDATE_*) are read at service construction; see
+# service.h for their meaning. Override per-board via the drop-in file above.
 Environment=FSUPDATE_PROGRESS_MS=250
 Environment=FSUPDATE_WORKER_NICE=5
 Environment=FSUPDATE_WORKER_IOPRIO=7

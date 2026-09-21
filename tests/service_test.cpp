@@ -460,7 +460,7 @@ protected:
  * Unit tests — individual method behaviour
  * ═══════════════════════════════════════════════════════════════════════════ */
 
-/* 1. StartDownload sets state fields correctly */
+/* StartDownload sets state fields correctly */
 TEST_F(ServiceTest, StartDownload_SetsState)
 {
     sd_bus_message* msg = make_msg("StartDownload");
@@ -477,7 +477,7 @@ TEST_F(ServiceTest, StartDownload_SetsState)
     EXPECT_EQ(svc_->m_download_progress, 0);
 }
 
-/* 2. StartDownload rejects when session is already active */
+/* StartDownload rejects when session is already active */
 TEST_F(ServiceTest, StartDownload_RejectsActiveSession)
 {
     {
@@ -497,7 +497,7 @@ TEST_F(ServiceTest, StartDownload_RejectsActiveSession)
     EXPECT_EQ(svc_->m_session_id, first_id);
 }
 
-/* 3. StartDownload allows new session after terminal (finished) state */
+/* StartDownload allows new session after terminal (finished) state */
 TEST_F(ServiceTest, StartDownload_AllowsNewSessionAfterFinished)
 {
     svc_->m_session_id      = 1;
@@ -513,7 +513,7 @@ TEST_F(ServiceTest, StartDownload_AllowsNewSessionAfterFinished)
     EXPECT_GT(svc_->m_session_id, 1u);
 }
 
-/* 4. StartDownload allows new session after terminal (failed) state */
+/* StartDownload allows new session after terminal (failed) state */
 TEST_F(ServiceTest, StartDownload_AllowsNewSessionAfterFailed)
 {
     svc_->m_session_id      = 5;
@@ -528,7 +528,7 @@ TEST_F(ServiceTest, StartDownload_AllowsNewSessionAfterFailed)
     EXPECT_NE(svc_->m_session_id, 0u);
 }
 
-/* 5. ReportDownloadProgress updates progress correctly */
+/* ReportDownloadProgress updates progress correctly */
 TEST_F(ServiceTest, ReportDownloadProgress_UpdatesProgress)
 {
     svc_->m_session_id      = 1;
@@ -543,7 +543,7 @@ TEST_F(ServiceTest, ReportDownloadProgress_UpdatesProgress)
     EXPECT_EQ(svc_->m_download_progress, 50);
 }
 
-/* 6. ReportDownloadProgress rejects wrong session id */
+/* ReportDownloadProgress rejects wrong session id */
 TEST_F(ServiceTest, ReportDownloadProgress_RejectsWrongSession)
 {
     svc_->m_session_id      = 1;
@@ -559,7 +559,7 @@ TEST_F(ServiceTest, ReportDownloadProgress_RejectsWrongSession)
     EXPECT_EQ(svc_->m_download_progress, 0);
 }
 
-/* 7. ReportDownloadProgress rejects when not in_progress */
+/* ReportDownloadProgress rejects when not in_progress */
 TEST_F(ServiceTest, ReportDownloadProgress_RejectsWhenNotInProgress)
 {
     svc_->m_session_id      = 1;
@@ -574,7 +574,7 @@ TEST_F(ServiceTest, ReportDownloadProgress_RejectsWhenNotInProgress)
     EXPECT_LT(r, 0);
 }
 
-/* 8. FinishDownload success sets finished + payload path + progress 100 */
+/* FinishDownload success sets finished + payload path + progress 100 */
 TEST_F(ServiceTest, FinishDownload_SetsFinished)
 {
     svc_->m_session_id      = 1;
@@ -591,7 +591,7 @@ TEST_F(ServiceTest, FinishDownload_SetsFinished)
     EXPECT_EQ(svc_->m_download_progress, 100);
 }
 
-/* 9. FinishDownload failure sets failed state */
+/* FinishDownload failure sets failed state */
 TEST_F(ServiceTest, FinishDownload_SetsFailed)
 {
     svc_->m_session_id      = 1;
@@ -606,7 +606,7 @@ TEST_F(ServiceTest, FinishDownload_SetsFailed)
     EXPECT_EQ(svc_->m_download_state, "failed");
 }
 
-/* 10. FinishDownload rejects wrong session id */
+/* FinishDownload rejects wrong session id */
 TEST_F(ServiceTest, FinishDownload_RejectsWrongSession)
 {
     svc_->m_session_id      = 1;
@@ -622,7 +622,7 @@ TEST_F(ServiceTest, FinishDownload_RejectsWrongSession)
     EXPECT_EQ(svc_->m_download_state, "in_progress");
 }
 
-/* 11. Apply rejects when install state is not finished */
+/* Apply rejects when install state is not finished */
 TEST_F(ServiceTest, Apply_RejectsWhenInstallNotFinished)
 {
     svc_->m_install_state = "in_progress";
@@ -635,7 +635,7 @@ TEST_F(ServiceTest, Apply_RejectsWhenInstallNotFinished)
     EXPECT_EQ(mock_->apply_calls_, 0);
 }
 
-/* 12. Apply forwards to the lib and resets session — reboot required
+/* Apply forwards to the lib and resets session — reboot required
  *     for firmware-bearing updates (the common case). RebootPending is
  *     derived: after the apply it reports whatever the durable state
  *     answers, not a flag the verb set. */
@@ -664,7 +664,7 @@ TEST_F(ServiceTest, Apply_FwForwardsAndResetsSession)
     EXPECT_EQ(svc_->m_update_size, 0u);
 }
 
-/* 13. Apply propagates the lib's no-reboot signal in its reply; the
+/* Apply propagates the lib's no-reboot signal in its reply; the
  *     published RebootPending derives from the durable state, which here
  *     owes nothing. The lib decides — service just relays. */
 TEST_F(ServiceTest, Apply_NoRebootPropagatesFromLib)
@@ -689,7 +689,7 @@ TEST_F(ServiceTest, Apply_NoRebootPropagatesFromLib)
     EXPECT_EQ(svc_->m_update_type, "");
 }
 
-/* 13b. Apply maps lib exceptions to a bus error and leaves session
+/* Apply maps lib exceptions to a bus error and leaves session
  *      fields untouched so a retry is safe. */
 TEST_F(ServiceTest, Apply_LibThrowReportsErrorAndKeepsSession)
 {
@@ -709,7 +709,7 @@ TEST_F(ServiceTest, Apply_LibThrowReportsErrorAndKeepsSession)
     EXPECT_EQ(svc_->m_install_state, "finished");
 }
 
-/* 14. Rollback acts on the durable dimension — the session mirror, even
+/* Rollback acts on the durable dimension — the session mirror, even
  * when set, never feeds the library — and a successful rollback resets the
  * session view. Session says "app", the durable state says "fw": the
  * library must be handed "fw". */
@@ -905,7 +905,7 @@ TEST(ServiceCtorRecoveryTest, NoOpWhenNothingPending)
     sd_bus_unref(bus);
 }
 
-/* 15. CheckUpdateAvailable calls updater when available */
+/* CheckUpdateAvailable calls updater when available */
 TEST_F(ServiceTest, CheckUpdateAvailable_Available)
 {
     mock_->check_result_ = {true, "fw", "2.1.0", 0};
@@ -916,7 +916,7 @@ TEST_F(ServiceTest, CheckUpdateAvailable_Available)
     EXPECT_EQ(mock_->check_calls_, 1);
 }
 
-/* 16. CheckUpdateAvailable calls updater when not available */
+/* CheckUpdateAvailable calls updater when not available */
 TEST_F(ServiceTest, CheckUpdateAvailable_NotAvailable)
 {
     mock_->check_result_ = {false, "", "", 0};
@@ -927,7 +927,7 @@ TEST_F(ServiceTest, CheckUpdateAvailable_NotAvailable)
     EXPECT_EQ(mock_->check_calls_, 1);
 }
 
-/* 17. ReportDownloadProgress clamps at 100 when bytes > size */
+/* ReportDownloadProgress clamps at 100 when bytes > size */
 TEST_F(ServiceTest, ReportDownloadProgress_ClampsAt100)
 {
     svc_->m_session_id      = 1;
@@ -943,7 +943,7 @@ TEST_F(ServiceTest, ReportDownloadProgress_ClampsAt100)
     EXPECT_EQ(svc_->m_download_progress, 100);
 }
 
-/* 18. StartDownload resets install state for a new session */
+/* StartDownload resets install state for a new session */
 TEST_F(ServiceTest, StartDownload_ResetsInstallState)
 {
     svc_->m_session_id       = 3;
@@ -961,7 +961,7 @@ TEST_F(ServiceTest, StartDownload_ResetsInstallState)
     EXPECT_EQ(svc_->m_download_state, "in_progress");
 }
 
-/* 19. StartInstall rejects wrong session id */
+/* StartInstall rejects wrong session id */
 TEST_F(ServiceTest, StartInstall_RejectsWrongSession)
 {
     prime_for_install();
@@ -995,7 +995,7 @@ TEST_F(ServiceTest, StartInstall_RejectsReservedSessionZero)
     EXPECT_EQ(svc_->m_install_progress, 0);
 }
 
-/* 20. StartInstall rejects when download not finished */
+/* StartInstall rejects when download not finished */
 TEST_F(ServiceTest, StartInstall_RejectsIfDownloadNotFinished)
 {
     prime_for_install();
@@ -1009,7 +1009,7 @@ TEST_F(ServiceTest, StartInstall_RejectsIfDownloadNotFinished)
     EXPECT_EQ(svc_->m_install_state, "idle");
 }
 
-/* 21. StartInstall rejects when install is already active or done */
+/* StartInstall rejects when install is already active or done */
 TEST_F(ServiceTest, StartInstall_RejectsIfInstallNotIdle)
 {
     prime_for_install();
@@ -1023,7 +1023,7 @@ TEST_F(ServiceTest, StartInstall_RejectsIfInstallNotIdle)
     EXPECT_EQ(svc_->m_install_state, "in_progress");
 }
 
-/* 22. StartInstall rejects when update_type does not match session */
+/* StartInstall rejects when update_type does not match session */
 TEST_F(ServiceTest, StartInstall_RejectsIfTypeMismatch)
 {
     prime_for_install();
@@ -1036,7 +1036,7 @@ TEST_F(ServiceTest, StartInstall_RejectsIfTypeMismatch)
     EXPECT_EQ(svc_->m_install_state, "idle");
 }
 
-/* 23. StartInstall sets install_state to in_progress immediately */
+/* StartInstall sets install_state to in_progress immediately */
 TEST_F(ServiceTest, StartInstall_SetsInProgressStateImmediately)
 {
     prime_for_install();
@@ -1055,7 +1055,7 @@ TEST_F(ServiceTest, StartInstall_SetsInProgressStateImmediately)
         svc_->m_install_thread.join();
 }
 
-/* 24. Progress callback posts event; on_wakeup updates install_progress */
+/* Progress callback posts event; on_wakeup updates install_progress */
 TEST_F(ServiceTest, StartInstall_ProgressCallback_UpdatesProgress)
 {
     prime_for_install();
@@ -1078,7 +1078,7 @@ TEST_F(ServiceTest, StartInstall_ProgressCallback_UpdatesProgress)
         svc_->m_install_thread.join();
 }
 
-/* 25. Successful install thread sets install_state to finished */
+/* Successful install thread sets install_state to finished */
 TEST_F(ServiceTest, StartInstall_ThreadCompletes_SetsFinished)
 {
     prime_for_install();
@@ -1097,7 +1097,7 @@ TEST_F(ServiceTest, StartInstall_ThreadCompletes_SetsFinished)
     EXPECT_EQ(mock_->update_calls_, 1);
 }
 
-/* 26. Failed install thread (exception) sets install_state to failed */
+/* Failed install thread (exception) sets install_state to failed */
 TEST_F(ServiceTest, StartInstall_ThreadFails_SetsFailed)
 {
     prime_for_install();
@@ -1116,7 +1116,7 @@ TEST_F(ServiceTest, StartInstall_ThreadFails_SetsFailed)
     EXPECT_EQ(mock_->update_calls_, 1);
 }
 
-/* 26b. A non-std exception from the lib must not kill the process —
+/* A non-std exception from the lib must not kill the process —
  * the worker converts it to a failed terminal so InstallCompleted
  * still fires for waiting clients. */
 TEST_F(ServiceTest, StartInstall_ThreadThrowsNonStd_SetsFailed)
@@ -1147,7 +1147,7 @@ TEST_F(ServiceTest, StartInstall_ThreadThrowsNonStd_SetsFailed)
  * Concurrency/errors: FR-SVC-060..079
  * ═══════════════════════════════════════════════════════════════════════════ */
 
-/* W3: StartDownload → ReportProgress → FinishDownload (fw, success)
+/* StartDownload → ReportProgress → FinishDownload (fw, success)
  * FR-SVC-020 placeholder */
 TEST_F(ServiceTest, Workflow_W3_FwDownloadHappy)
 {
@@ -1178,7 +1178,7 @@ TEST_F(ServiceTest, Workflow_W3_FwDownloadHappy)
     EXPECT_EQ(svc_->m_update_type, "fw");
 }
 
-/* W4: App download happy path
+/* App download happy path
  * FR-SVC-021 placeholder */
 TEST_F(ServiceTest, Workflow_W4_AppDownloadHappy)
 {
@@ -1199,7 +1199,7 @@ TEST_F(ServiceTest, Workflow_W4_AppDownloadHappy)
     EXPECT_EQ(svc_->m_payload_path, "/tmp/app.raucb");
 }
 
-/* W7: Full fw flow — download → install → apply (reboot required)
+/* Full fw flow — download → install → apply (reboot required)
  * FR-SVC-030 placeholder */
 TEST_F(ServiceTest, Workflow_W7_FwInstallToApply)
 {
@@ -1246,7 +1246,7 @@ TEST_F(ServiceTest, Workflow_W7_FwInstallToApply)
     EXPECT_EQ(svc_->m_install_progress, 0);
 }
 
-/* W8: App install — service propagates the lib's reboot signal.
+/* App install — service propagates the lib's reboot signal.
  * The new app squashfs is only picked up at preinit, so the lib's
  * apply_pending_update reports reboot required for app-only too.
  * FR-SVC-031 placeholder */
@@ -1285,7 +1285,7 @@ TEST_F(ServiceTest, Workflow_W8_AppInstallApplyRebootRequired)
     EXPECT_EQ(svc_->m_session_id, 0u);
 }
 
-/* W11: Install failure → Rollback is refused when the durable state names
+/* Install failure → Rollback is refused when the durable state names
  * no rollback dimension: a failed install staged nothing, and the library's
  * firmware rollback on such a device would switch to the other committed
  * slot — an unrequested downgrade. The failed session is cleared by the
@@ -1321,7 +1321,7 @@ TEST_F(ServiceTest, Workflow_W11_InstallFailureRollbackRefusedNothingPending)
     EXPECT_EQ(svc_->m_download_state, "in_progress");
 }
 
-/* W16: Download failure, then Rollback with a genuinely pending durable
+/* Download failure, then Rollback with a genuinely pending durable
  * update: the library acts on the DURABLE dimension, never on the failed
  * session's announced type — the announced payload was never installed.
  * FR-SVC-050 placeholder */
@@ -1350,7 +1350,7 @@ TEST_F(ServiceTest, Workflow_W16_DownloadFailureThenRollback)
     EXPECT_EQ(svc_->m_session_id, 0u);
 }
 
-/* W21: Second StartInstall while already in_progress is rejected
+/* Second StartInstall while already in_progress is rejected
  * FR-SVC-060 placeholder */
 TEST_F(ServiceTest, Workflow_W21_ConcurrentInstallRejected)
 {
@@ -1377,7 +1377,7 @@ TEST_F(ServiceTest, Workflow_W21_ConcurrentInstallRejected)
         svc_->m_install_thread.join();
 }
 
-/* W22: Type mismatch between downloaded type and StartInstall type is rejected
+/* Type mismatch between downloaded type and StartInstall type is rejected
  * FR-SVC-061 placeholder */
 TEST_F(ServiceTest, Workflow_W22_StartInstall_TypeMismatch)
 {
@@ -1402,7 +1402,7 @@ TEST_F(ServiceTest, Workflow_W22_StartInstall_TypeMismatch)
     EXPECT_EQ(svc_->m_install_state, "idle");
 }
 
-/* W30: Rollback while install in_progress must return -EBUSY
+/* Rollback while install in_progress must return -EBUSY
  * FR-SVC-063 placeholder */
 TEST_F(ServiceTest, Workflow_W30_RollbackDuringInstall_G2)
 {
@@ -1448,8 +1448,8 @@ TEST_F(ServiceTest, BusyContract_AllSitesUnified)
         EXPECT_EQ(name, "de.fsembedded.fsupdate1.Error.Busy") << leg;
     };
 
-    /* StartDownload during a running install is the only busy site that also
-     * changes the returned errno (it was ungated before), so pin it too. */
+    /* StartDownload during a running install is the one busy site with its
+     * own errno; pin it. */
     {
         sd_bus_message* m = make_msg("StartDownload");
         sd_bus_message_append(m, "sst", "fw", "1.0", static_cast<uint64_t>(1));
@@ -1493,7 +1493,7 @@ TEST_F(ServiceTest, BusyContract_AllSitesUnified)
     EXPECT_EQ(svc_->m_install_state, "in_progress");
 }
 
-/* S2: StartInstall on a terminal install_state (finished/failed) is a
+/* StartInstall on a terminal install_state (finished/failed) is a
  * permanent condition, not transient — it must report FAILED/-EINVAL, not the
  * busy contract, so a client does not retry-loop waiting for self-clearing. */
 TEST_F(ServiceTest, StartInstall_TerminalStateRejectsPermanently)
@@ -1511,7 +1511,7 @@ TEST_F(ServiceTest, StartInstall_TerminalStateRejectsPermanently)
     }
 }
 
-/* S6: a missing updater backend reports the distinct Error.NoUpdater name (and
+/* A missing updater backend reports the distinct Error.NoUpdater name (and
  * -ENOSYS), not a generic Failed — the errno alone cannot cross the bus, so
  * without the name a client cannot tell "no updater" apart from any failure.
  * Rebuild the service with a null updater and call directly (native path:
@@ -1531,7 +1531,7 @@ TEST_F(ServiceTest, NoUpdater_ReportsDistinctName)
     EXPECT_EQ(name, "de.fsembedded.fsupdate1.Error.NoUpdater");
 }
 
-/* S1: a second StartDownload during a running install must be rejected (busy),
+/* A second StartDownload during a running install must be rejected (busy),
  * not mint a new session over the live worker. download_state reads "finished"
  * throughout the install phase, so only the install-state guard stops the
  * hijack; the original session must survive untouched. */
@@ -1564,9 +1564,8 @@ TEST_F(ServiceTest, StartDownload_RejectedDuringInstall)
         svc_->m_install_thread.join();
 }
 
-/* W31: Rollback does not fabricate a RebootPending clear. It used to zero a
- * mirror flag; the property now derives from the durable state, and a taken
- * rollback still waits for its reboot — only the session view is torn down.
+/* Rollback must not touch RebootPending: it derives from the durable state
+ * and a taken rollback still waits for its reboot.
  * FR-SVC-064 placeholder */
 TEST_F(ServiceTest, Workflow_W31_RollbackKeepsDerivedRebootPending_G3)
 {
@@ -1582,7 +1581,7 @@ TEST_F(ServiceTest, Workflow_W31_RollbackKeepsDerivedRebootPending_G3)
     EXPECT_EQ(mock_->last_rollback_type_, "fw");
 }
 
-/* W32: Apply clears download_state and download_progress
+/* Apply clears download_state and download_progress
  * FR-SVC-065 placeholder */
 TEST_F(ServiceTest, Workflow_W32_DownloadStateClearedByApply_G4)
 {
@@ -2104,10 +2103,8 @@ TEST_F(ServiceTest, ANegativeErrnoDoesNotInvertIntoSuccess)
     EXPECT_EQ(r, -EIO);
 }
 
-/* "Nothing to apply" is the case the command-line tool separates locally and
- * the bus could not: it shared Error.Internal with every genuine internal
- * failure. The library gained its own category for it; this pins that the name
- * follows. */
+/* Nothing to apply has its own category and therefore its own error name;
+ * pin that the name follows. */
 TEST_F(ServiceTest, NothingToApply_ReportsItsOwnName)
 {
     mock_->arm_failure("nothing_to_apply", 0);
@@ -2128,7 +2125,7 @@ TEST_F(ServiceTest, NothingToApply_ReportsItsOwnName)
  * through the real property getters.
  * ═══════════════════════════════════════════════════════════════════════════ */
 
-/* Divergence 4: after a successful install the durable state owes a reboot;
+/* After a successful install the durable state owes a reboot;
  * the published RebootPending must say so without any further verb. */
 TEST_F(ServiceTest, RebootPending_DerivedTrueAfterSuccessfulInstall)
 {
@@ -2149,7 +2146,7 @@ TEST_F(ServiceTest, RebootPending_DerivedTrueAfterSuccessfulInstall)
     EXPECT_TRUE(read_reboot_pending());
 }
 
-/* Divergence 1: a failed install must not leave the rejected payload
+/* A failed install must not leave the rejected payload
  * advertised. The durable state holds nothing; the properties follow it. */
 TEST_F(ServiceTest, FailedInstall_DoesNotAdvertiseTheRejectedPayload)
 {
@@ -2180,7 +2177,7 @@ TEST_F(ServiceTest, FailedInstall_DoesNotAdvertiseTheRejectedPayload)
     EXPECT_EQ(read_update_type(), "");
 }
 
-/* Divergence 2: the local verbs mutate the durable state without ever
+/* The local verbs mutate the durable state without ever
  * reaching this daemon. The published view must follow at the next read,
  * in both directions, with no service verb in between. */
 TEST_F(ServiceTest, DurableChangeWithoutServiceInvolvement_IsPublishedImmediately)
@@ -2234,7 +2231,7 @@ TEST_F(ServiceTest, Rollback_NothingToRollBackIsRejectedNotSilentSuccess)
     EXPECT_EQ(svc_->m_download_state, "failed");
 }
 
-/* Divergence 3, repaired: a restarted service has no session metadata, but
+/* A restarted service has no session metadata, but
  * the durable state still names its rollback dimension. Rollback takes that
  * dimension — never the session mirror — instead of handing the library an
  * empty string, and afterwards nothing fabricates RebootPending=false: a

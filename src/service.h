@@ -158,19 +158,9 @@ public:
     std::string m_payload_path;
 
     /* ── Published update view (derived on read) ──────────────────────
-     * DISPLAY ONLY. The five affected property getters and
-     * method_get_state call this same helper, so the two read paths
-     * cannot drift apart — and nothing else may consult it: a value
-     * computed for display (in flight it reports the announced session
-     * as available) must never carry an authorization decision. The
-     * verbs ask the updater their own, narrower questions.
-     * UpdateAvailable / RebootPending come from the durable state
-     * (through IUpdater); UpdateType / Version / Size are the session's
-     * announced values while it is in flight and the durable answer
-     * otherwise. While the worker thread is inside the library, the
-     * helper does not enter it from the loop thread — the session
-     * answers instead (sd-bus and the library are single-threaded by
-     * contract). */
+     * DISPLAY ONLY, never an authorization input: in flight it reports the
+     * announced session as available. Loop-thread only; while the worker is
+     * inside the library the session answers instead of the library. */
     struct PublishedUpdateView {
         bool        update_available = false;
         std::string update_type;
