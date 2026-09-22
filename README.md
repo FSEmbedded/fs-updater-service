@@ -34,8 +34,9 @@ Pass the lib build that matches the mode — the lib's `build_san/` for `sanitiz
 staged archive carries its own flags, so a sanitized lib in a plain binary fails to link, and a
 plain lib in a sanitized binary leaves the library half of the code uninstrumented.
 `build.sh` prints its full target and flag list itself; it has no `--help`, so an unknown option is
-what produces the usage text (exit 1). It auto-detects a vendored `vendor/libsystemd-dev` when the
-host has no libsystemd of its own.
+what produces the usage text (exit 1). The native `test` target needs `libsystemd-dev` on the host;
+drop your own build of it at `vendor/libsystemd-dev` (headers under `include/`, the library under
+`lib/`) to use that instead.
 
 The cross `sanitize` target and the native `test --sanitize` both route through the
 `ENABLE_SANITIZERS` option. Passing sanitizer flags via `CMAKE_CXX_FLAGS` instead does nothing on a
@@ -47,9 +48,6 @@ what the CI sets.
 
 Build options: `BUILD_TESTING`, `ENABLE_SANITIZERS`, `FSUP_WERROR`. Defaults live in
 `CMakeLists.txt` rather than here, so they cannot drift out of step with it.
-
-The linter is not part of a build: it lives in the container repository as
-`../tools/lint-component.sh` and needs a configured sibling `fs-updater-lib` checkout plus the SDK.
 
 ## Runtime files
 

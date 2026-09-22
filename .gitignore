@@ -4,3 +4,4 @@ build-native/
 build-test/
 build-test-san/
 build-lint/
+vendor/
