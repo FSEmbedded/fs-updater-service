@@ -109,7 +109,10 @@
         A library failure that carried an errno.
 
     de.fsembedded.fsupdate1.Error.NotAllowedState   (-EIO)
-        The durable update state forbids the operation.
+        The durable update state forbids the operation. Rollback answers it
+        for every state that owns no rollback move, with the state and the
+        way out in the message; it answered Error.Generic until
+        InterfaceVersion 6.
 
     de.fsembedded.fsupdate1.Error.UpdateInProgress  (-EIO)
         Another update is uncommitted.
@@ -431,8 +434,10 @@
       the library's firmware rollback on a device with nothing pending is
       not a no-op, it switches the boot order to the other committed slot.
       A pending update that survived a service restart is therefore still
-      rollback-able, and a taken rollback awaiting its commit is answered by
-      the library's own "commit required" rejection. When the durable state
+      rollback-able, and a rollback that is already taken, or a pending update
+      with nothing left in flight, is refused with Error.NotAllowedState; the
+      message names the state and the way out (commit, or the reboot that
+      precedes it). When the durable state
       names no dimension (idle, or uninterpretable), the call is refused
       with Error.NothingToApply: this method carries no type argument, so
       there is nothing the door could act on. The same refusal also
