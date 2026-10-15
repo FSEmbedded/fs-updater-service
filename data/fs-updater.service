@@ -52,11 +52,13 @@ MemoryMax=256M
 LimitNOFILE=4096
 
 # Worker-tuning knobs (FSUPDATE_*) are read at service construction; see
-# service.h for their meaning. Override per-board via the drop-in file above.
+# service.h and hawkbit_service.h for their meaning. Override per-board via the
+# drop-in file above.
 Environment=FSUPDATE_PROGRESS_MS=250
 Environment=FSUPDATE_WORKER_NICE=5
 Environment=FSUPDATE_WORKER_IOPRIO=7
 Environment=FSUPDATE_INHIBIT_SLEEP=1
+Environment=FSUPDATE_INSTALL_TIMEOUT_SEC=1800
 
 [Install]
 WantedBy=multi-user.target

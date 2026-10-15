@@ -35,6 +35,7 @@ endif()
 add_executable(fs-updater-service
     src/main.cpp
     src/service.cpp
+    src/hawkbit_service.cpp
 )
 
 target_include_directories(fs-updater-service PRIVATE src)
@@ -119,6 +120,7 @@ install(FILES
 
 install(FILES
     dbus/de.fsembedded.fsupdate1.xml
+    dbus/de.fsembedded.fsupdate1.Installer.xml
     DESTINATION ${CMAKE_INSTALL_DATAROOTDIR}/dbus-1/interfaces
 )
 
@@ -141,6 +143,7 @@ if(BUILD_TESTING)
         tests/main_test.cpp
         tests/service_test.cpp
         src/service.cpp
+        src/hawkbit_service.cpp
     )
 
     target_include_directories(fs-updater-service-tests PRIVATE src)
@@ -187,6 +190,12 @@ if(BUILD_TESTING)
                 ${CMAKE_CURRENT_SOURCE_DIR}/tests/check_interface_contract.py
                 ${CMAKE_CURRENT_SOURCE_DIR}/dbus/de.fsembedded.fsupdate1.xml
                 ${CMAKE_CURRENT_SOURCE_DIR}/src/service.cpp)
+        add_test(NAME installer-interface-contract
+            COMMAND ${Python3_EXECUTABLE}
+                ${CMAKE_CURRENT_SOURCE_DIR}/tests/check_interface_contract.py
+                ${CMAKE_CURRENT_SOURCE_DIR}/dbus/de.fsembedded.fsupdate1.Installer.xml
+                ${CMAKE_CURRENT_SOURCE_DIR}/src/hawkbit_service.cpp
+                installer_vtable)
     else()
         message(WARNING "python3 not found: the interface-contract check is skipped")
     endif()

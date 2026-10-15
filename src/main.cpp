@@ -1,4 +1,5 @@
 #include "service.h"
+#include "hawkbit_service.h"
 
 #ifdef HAVE_FUS_LIB
 #include "real_updater.h"
@@ -14,6 +15,7 @@
 static constexpr const char* BUS_NAME  = "de.fsembedded.fsupdate1";
 static constexpr const char* OBJ_PATH  = "/de/fsembedded/fsupdate1";
 static constexpr const char* INTERFACE = "de.fsembedded.fsupdate1";
+static constexpr const char* INSTALLER_INTERFACE = "de.fsembedded.fsupdate1.Installer";
 
 int main()
 {
@@ -46,12 +48,23 @@ int main()
 #else
     Service svc(bus, event, nullptr);
 #endif
+    HawkbitService hawkbit_svc(bus, event);
 
     r = sd_bus_add_object_vtable(bus, nullptr,
                                   OBJ_PATH, INTERFACE,
                                   Service::service_vtable, &svc);
     if (r < 0) {
         sd_journal_print(LOG_ERR, "fs-updater-service: register vtable: %s\n", strerror(-r));
+        sd_event_unref(event);
+        sd_bus_unref(bus);
+        return 1;
+    }
+
+    r = sd_bus_add_object_vtable(bus, nullptr,
+                                  "/", INSTALLER_INTERFACE,
+                                  HawkbitService::installer_vtable, &hawkbit_svc);
+    if (r < 0) {
+        sd_journal_print(LOG_ERR, "fs-updater-service: register root installer vtable: %s\n", strerror(-r));
         sd_event_unref(event);
         sd_bus_unref(bus);
         return 1;

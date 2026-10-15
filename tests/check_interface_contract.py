@@ -27,8 +27,20 @@ def documented_methods(xml_path: Path) -> set[str]:
     return {m.get("name") for m in root.iter("method")}
 
 
-def exported_methods(src_path: Path) -> set[str]:
-    return set(re.findall(r'SD_BUS_METHOD\(\s*"(\w+)"', src_path.read_text()))
+def vtable_text(src_path: Path, table_name: str) -> str:
+    text = src_path.read_text()
+    match = re.search(
+        rf"(?:Service|HawkbitService)::{re.escape(table_name)}\[\]\s*=\s*\{{(.*?)SD_BUS_VTABLE_END",
+        text,
+        re.S,
+    )
+    if match is None:
+        raise SystemExit(f"could not find vtable {table_name!r} in {src_path}")
+    return match.group(1)
+
+
+def exported_methods(src_path: Path, table_name: str) -> set[str]:
+    return set(re.findall(r'SD_BUS_METHOD\(\s*"(\w+)"', vtable_text(src_path, table_name)))
 
 
 # D-Bus type codes for the argument types this interface actually uses. A type
@@ -58,7 +70,7 @@ def documented_signals(xml_path: Path) -> dict[str, str]:
     return signals
 
 
-def exported_signals(src_path: Path) -> dict[str, str]:
+def exported_signals(src_path: Path, table_name: str) -> dict[str, str]:
     """Signal name -> signature, as registered in the vtable.
 
     Every SD_BUS_SIGNAL occurrence must be matched, not merely the ones whose
@@ -68,7 +80,7 @@ def exported_signals(src_path: Path) -> dict[str, str]:
     exactly the check meant to catch it. So the total is counted first and a
     shortfall is an error, not a quiet pass.
     """
-    text = src_path.read_text()
+    text = vtable_text(src_path, table_name)
     total = len(re.findall(r'SD_BUS_SIGNAL\w*\(', text))
     found = re.findall(r'SD_BUS_SIGNAL\(\s*"(\w+)"\s*,\s*"([a-z{}()]*)"', text)
     if len(found) != total:
@@ -107,14 +119,14 @@ def documented_properties(xml_path: Path) -> dict[str, str]:
     return props
 
 
-def exported_properties(src_path: Path) -> dict[str, str]:
+def exported_properties(src_path: Path, table_name: str) -> dict[str, str]:
     """Property name -> mode, as registered in the vtable.
 
     Counted first like the signals: a property whose flags this pattern cannot
     spell would otherwise drop out of the comparison silently, which is the
     failure the check exists to prevent.
     """
-    text = src_path.read_text()
+    text = vtable_text(src_path, table_name)
     total = len(re.findall(r"SD_BUS_[A-Z_]*PROPERTY[A-Z_]*\(", text))
     found = re.findall(
         r'SD_BUS_[A-Z_]*PROPERTY[A-Z_]*\(\s*"(\w+)"\s*,\s*"[a-z{}()]*"\s*,'
@@ -138,14 +150,15 @@ def exported_properties(src_path: Path) -> dict[str, str]:
 
 
 def main() -> int:
-    if len(sys.argv) != 3:
-        print("usage: check_interface_contract.py <interface.xml> <service.cpp>",
+    if len(sys.argv) not in (3, 4):
+        print("usage: check_interface_contract.py <interface.xml> <service.cpp> [vtable]",
               file=sys.stderr)
         return 2
 
     xml_path, src_path = Path(sys.argv[1]), Path(sys.argv[2])
+    table_name = sys.argv[3] if len(sys.argv) == 4 else "service_vtable"
     documented = documented_methods(xml_path)
-    exported = exported_methods(src_path)
+    exported = exported_methods(src_path, table_name)
 
     undocumented = sorted(exported - documented)
     phantom = sorted(documented - exported)
@@ -162,7 +175,7 @@ def main() -> int:
     # fatal to a generated proxy that checks the whole thing, so the one change
     # the stability rules forbid is exactly the one a name-only check misses.
     doc_signals = documented_signals(xml_path)
-    exp_signals = exported_signals(src_path)
+    exp_signals = exported_signals(src_path, table_name)
 
     undocumented_sig = sorted(set(exp_signals) - set(doc_signals))
     phantom_sig = sorted(set(doc_signals) - set(exp_signals))
@@ -189,7 +202,7 @@ def main() -> int:
     # believes the default carries the new value in the signal payload waits
     # for a payload that never arrives.
     doc_props = documented_properties(xml_path)
-    exp_props = exported_properties(src_path)
+    exp_props = exported_properties(src_path, table_name)
 
     undocumented_prop = sorted(set(exp_props) - set(doc_props))
     phantom_prop = sorted(set(doc_props) - set(exp_props))

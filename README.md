@@ -11,12 +11,19 @@ as the state owner for cloud-flow update operations.
 | Object path | `/de/fsembedded/fsupdate1` |
 | Interface | `de.fsembedded.fsupdate1` |
 
-## The interface
+## The interfaces
 
-**`dbus/de.fsembedded.fsupdate1.xml` is the interface reference.** It is the published form of the
-interface, not merely an introspection dump: every method, property and signal carries its caller,
-its precondition and the error it raises, and the file is kept member-for-member in step with the
-vtable in `src/service.cpp`. Read it before writing a client; nothing here restates it.
+**`dbus/de.fsembedded.fsupdate1.xml` is the primary interface reference.** It is the published form
+of the interface, not merely an introspection dump: every method, property and signal carries its
+caller, its precondition and the error it raises, and the file is kept member-for-member in step
+with `Service::service_vtable` in `src/service.cpp`.
+
+`dbus/de.fsembedded.fsupdate1.Installer.xml` describes the additional
+`de.fsembedded.fsupdate1.Installer` interface, implemented separately by
+`HawkbitService` in `src/hawkbit_service.cpp` and registered on both `/` and
+`/de/fsembedded/fsupdate1`. `InstallBundle` launches `/usr/sbin/fs-updater` and
+emits `Completed` with its exit status; its timeout is configured by
+`FSUPDATE_INSTALL_TIMEOUT_SEC`.
 
 ## Build
 
@@ -59,3 +66,4 @@ Build options: `BUILD_TESTING`, `ENABLE_SANITIZERS`, `FSUP_WERROR`. Defaults liv
 | `data/fs-updater.service` | systemd service unit |
 | `data/50-fsupdate.rules` | polkit ADU rule |
 | `dbus/de.fsembedded.fsupdate1.xml` | The interface reference — see above |
+| `dbus/de.fsembedded.fsupdate1.Installer.xml` | Installer interface reference |
